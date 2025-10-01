@@ -10,7 +10,6 @@ const AnalyticsDashboard = ({ userProfile }) => {
     successRate: 0,
     averageEmailsPerCampaign: 0,
     recentActivity: [],
-    topRegions: [],
     dailyStats: []
   });
   const [loading, setLoading] = useState(true);
@@ -53,7 +52,6 @@ const AnalyticsDashboard = ({ userProfile }) => {
 
       const querySnapshot = await getDocs(q);
       const campaigns = [];
-      const regionStats = {};
       const dailyStats = {};
 
       querySnapshot.forEach((doc) => {
@@ -78,12 +76,8 @@ const AnalyticsDashboard = ({ userProfile }) => {
         return dateB - dateA; // Newest first
       });
 
-      // Calculate region and daily stats from filtered campaigns
+      // Calculate daily stats from filtered campaigns
       filteredCampaigns.forEach(campaign => {
-        // Count by region
-        const region = campaign.awsRegion || 'Unknown';
-        regionStats[region] = (regionStats[region] || 0) + 1;
-
         // Count by day
         const day = campaign.createdAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0];
         if (!dailyStats[day]) {
@@ -104,12 +98,6 @@ const AnalyticsDashboard = ({ userProfile }) => {
       const averageEmailsPerCampaign = totalCampaigns > 0 
         ? Math.round((totalEmailsSent + totalEmailsFailed) / totalCampaigns)
         : 0;
-
-      // Top regions
-      const topRegions = Object.entries(regionStats)
-        .map(([region, count]) => ({ region, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5);
 
       // Daily stats (last 7 days)
       const dailyStatsArray = Object.entries(dailyStats)
@@ -132,8 +120,7 @@ const AnalyticsDashboard = ({ userProfile }) => {
           subject: campaign.subject,
           sent: campaign.sentCount || 0,
           failed: campaign.failedCount || 0,
-          date: campaign.createdAt,
-          region: campaign.awsRegion
+          date: campaign.createdAt
         }));
 
       setAnalytics({
@@ -143,7 +130,6 @@ const AnalyticsDashboard = ({ userProfile }) => {
         successRate,
         averageEmailsPerCampaign,
         recentActivity,
-        topRegions,
         dailyStats: dailyStatsArray
       });
 
@@ -273,28 +259,6 @@ const AnalyticsDashboard = ({ userProfile }) => {
               ))}
             </div>
           </div>
-
-          {/* Top Regions */}
-          <div className="regions-container">
-            <h3>Top Regions</h3>
-            <div className="regions-list">
-              {analytics.topRegions.map((region, index) => (
-                <div key={region.region} className="region-item">
-                  <div className="region-rank">#{index + 1}</div>
-                  <div className="region-name">{region.region}</div>
-                  <div className="region-count">{region.count} campaigns</div>
-                  <div className="region-bar">
-                    <div 
-                      className="region-fill" 
-                      style={{ 
-                        width: `${(region.count / analytics.topRegions[0]?.count) * 100}%` 
-                      }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
         {/* Recent Activity */}
@@ -311,7 +275,6 @@ const AnalyticsDashboard = ({ userProfile }) => {
                   <div className="activity-details">
                     <span className="sent">{activity.sent} sent</span>
                     <span className="failed">{activity.failed} failed</span>
-                    <span className="region">{activity.region}</span>
                   </div>
                 </div>
                 <div className="activity-time">

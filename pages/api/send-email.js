@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { to, name, from, subject, region, accessKeyId, secretAccessKey, htmlContent } = req.body;
+    const { to, name, from, subject, accessKeyId, secretAccessKey, htmlContent } = req.body;
 
     // Enhanced validation
     if (!to || !from || !subject) {
@@ -52,6 +52,9 @@ export default async function handler(req, res) {
       });
     }
 
+    // Get AWS region from environment variable
+    const selectedRegion = process.env.AWS_REGION || 'us-east-2';
+    
     // Region validation
     const validRegions = [
       'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2',
@@ -62,11 +65,10 @@ export default async function handler(req, res) {
       'sa-east-1'
     ];
 
-    const selectedRegion = region || 'us-east-1';
     if (!validRegions.includes(selectedRegion)) {
       return res.status(400).json({ 
         success: false,
-        error: 'Invalid AWS region specified' 
+        error: 'Invalid AWS region specified in environment configuration' 
       });
     }
 

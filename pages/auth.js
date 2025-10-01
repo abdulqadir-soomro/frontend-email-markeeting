@@ -254,7 +254,6 @@ export default function Auth() {
         gmailFrom: email,
         company: '',
         phone: '',
-        region: 'us-east-1',
         emailsPerDay: 10,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -377,7 +376,6 @@ export default function Auth() {
           gmailFrom: user.email,
           company: '',
           phone: '',
-          region: 'us-east-1',
           emailsPerDay: 10,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()

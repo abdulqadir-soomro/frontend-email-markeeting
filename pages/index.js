@@ -20,7 +20,6 @@ const EmailMarketingDashboard = () => {
   const [emailList, setEmailList] = useState([]);
   const [emailFrom, setEmailFrom] = useState('');
   const [subject, setSubject] = useState('');
-  const [awsRegion, setAwsRegion] = useState('us-east-1');
   const [emailContent, setEmailContent] = useState({
     subject: '',
     htmlContent: ''
@@ -42,20 +41,6 @@ const EmailMarketingDashboard = () => {
   // Error handling
   const [errorMessage, setErrorMessage] = useState('');
 
-  // AWS Regions
-  const awsRegions = [
-    { value: 'us-east-1', label: 'US East (N. Virginia)' },
-    { value: 'us-east-2', label: 'US East (Ohio)' },
-    { value: 'us-west-1', label: 'US West (N. California)' },
-    { value: 'us-west-2', label: 'US West (Oregon)' },
-    { value: 'eu-west-1', label: 'Europe (Ireland)' },
-    { value: 'eu-west-2', label: 'Europe (London)' },
-    { value: 'eu-central-1', label: 'Europe (Frankfurt)' },
-    { value: 'ap-southeast-1', label: 'Asia Pacific (Singapore)' },
-    { value: 'ap-southeast-2', label: 'Asia Pacific (Sydney)' },
-    { value: 'ap-northeast-1', label: 'Asia Pacific (Tokyo)' },
-    { value: 'ca-central-1', label: 'Canada (Central)' }
-  ];
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -80,7 +65,6 @@ const EmailMarketingDashboard = () => {
       const demoUser = JSON.parse(localStorage.getItem('demoUser') || '{}');
       if (demoUser.email) {
         setEmailFrom(demoUser.email);
-        setAwsRegion(demoUser.awsRegion || 'us-east-1');
       }
 
       // Load email history from database
@@ -303,7 +287,7 @@ const EmailMarketingDashboard = () => {
   };
 
   const sendEmailsWithProgress = async () => {
-    const results = { sent: 0, failed: 0, errors: [] };
+    const results = { sent: 0, failed: 0, errors: [], emailRecords: [] };
     
     for (let i = 0; i < emailList.length; i++) {
       const email = emailList[i];
@@ -322,43 +306,43 @@ const EmailMarketingDashboard = () => {
             to: email.email,
             from: emailFrom,
             subject: emailContent.subject,
-            region: awsRegion,
             htmlContent: personalizedContent
           })
         });
 
         const result = await response.json();
         
+        const emailRecord = {
+          email: email.email,
+          name: email.name,
+          status: result.success ? 'sent' : 'failed',
+          timestamp: new Date().toISOString(),
+          error: result.success ? null : result.error
+        };
+        
         if (result.success) {
           results.sent++;
-          setRealTimeEmails(prev => [...prev, {
-            email: email.email,
-            name: email.name,
-            status: 'sent',
-            timestamp: new Date().toISOString(),
-            error: null
-          }]);
         } else {
           results.failed++;
           results.errors.push({ email: email.email, error: result.error });
-          setRealTimeEmails(prev => [...prev, {
-            email: email.email,
-            name: email.name,
-            status: 'failed',
-            timestamp: new Date().toISOString(),
-            error: result.error
-          }]);
         }
+        
+        results.emailRecords.push(emailRecord);
+        setRealTimeEmails(prev => [...prev, emailRecord]);
       } catch (error) {
         results.failed++;
         results.errors.push({ email: email.email, error: error.message });
-        setRealTimeEmails(prev => [...prev, {
+        
+        const emailRecord = {
           email: email.email,
           name: email.name,
           status: 'failed',
           timestamp: new Date().toISOString(),
           error: error.message
-        }]);
+        };
+        
+        results.emailRecords.push(emailRecord);
+        setRealTimeEmails(prev => [...prev, emailRecord]);
       }
 
       setCurrentProgress(progress);
@@ -372,7 +356,7 @@ const EmailMarketingDashboard = () => {
     return results;
   };
 
-  const saveCampaignToDatabase = async (campaignData) => {
+  const saveCampaignToDatabase = async (campaignData, emailRecordsToSave) => {
     try {
       if (!db || !userProfile?.uid) {
         throw new Error('Database not initialized or user not found');
@@ -393,7 +377,6 @@ const EmailMarketingDashboard = () => {
         userId: userProfile.uid,
         subject: campaignData.subject,
         from: campaignData.from,
-        awsRegion: campaignData.awsRegion,
         sentCount: campaignData.sentCount,
         failedCount: campaignData.failedCount,
         totalEmails: campaignData.totalEmails,
@@ -411,9 +394,12 @@ const EmailMarketingDashboard = () => {
       const addDocPromise = addDoc(collection(db, 'campaigns'), campaignRecord);
       const docRef = await Promise.race([addDocPromise, timeoutPromise]);
 
+      console.log('Campaign saved with ID:', docRef.id);
+      console.log('Email records to save:', emailRecordsToSave?.length || 0);
+
       // Save individual email records
-      if (realTimeEmails.length > 0) {
-        const emailRecords = realTimeEmails.map(email => ({
+      if (emailRecordsToSave && emailRecordsToSave.length > 0) {
+        const emailRecords = emailRecordsToSave.map(email => ({
           campaignId: docRef.id,
           userId: userProfile.uid,
           email: email.email,
@@ -424,6 +410,8 @@ const EmailMarketingDashboard = () => {
           createdAt: serverTimestamp()
         }));
 
+        console.log('Saving', emailRecords.length, 'email records...');
+
         for (const record of emailRecords) {
           try {
             await addDoc(collection(db, 'emailRecords'), record);
@@ -431,6 +419,10 @@ const EmailMarketingDashboard = () => {
             console.error('Error saving email record:', error);
           }
         }
+        
+        console.log('Email records saved successfully');
+      } else {
+        console.warn('No email records to save!');
       }
 
       return docRef.id;
@@ -448,9 +440,6 @@ const EmailMarketingDashboard = () => {
       }
       if (!subject || subject.trim().length === 0) {
         throw new Error('Please enter an email subject');
-      }
-      if (!awsRegion) {
-        throw new Error('Please select an AWS region');
       }
       if (!emailList || emailList.length === 0) {
         throw new Error('Please upload an email list first');
@@ -492,7 +481,6 @@ const EmailMarketingDashboard = () => {
         const campaignData = {
           subject: emailContent.subject,
           from: emailFrom,
-          awsRegion: awsRegion,
           sentCount: result.sent,
           failedCount: result.failed,
           totalEmails: emailList.length,
@@ -501,7 +489,8 @@ const EmailMarketingDashboard = () => {
           duration: duration
         };
 
-        const campaignId = await saveCampaignToDatabase(campaignData);
+        console.log('Saving campaign with', result.emailRecords?.length || 0, 'email records');
+        const campaignId = await saveCampaignToDatabase(campaignData, result.emailRecords);
         console.log('Campaign saved to database with ID:', campaignId);
         
         await loadEmailHistoryFromDatabase(userProfile.uid);
@@ -679,20 +668,6 @@ const EmailMarketingDashboard = () => {
                   placeholder="your-email@domain.com"
                   required
                 />
-              </div>
-              <div className="form-group">
-                <label>AWS Region *</label>
-                <select
-                  value={awsRegion}
-                  onChange={(e) => setAwsRegion(e.target.value)}
-                  required
-                >
-                  {awsRegions.map(region => (
-                    <option key={region.value} value={region.value}>
-                      {region.label}
-                    </option>
-                  ))}
-                </select>
               </div>
             </div>
           </section>
@@ -925,10 +900,6 @@ const EmailMarketingDashboard = () => {
                   </div>
                   <div className="campaign-details">
                     <div className="detail-row">
-                      <span className="detail-label">AWS Region:</span>
-                      <span className="detail-value">{campaign.awsRegion}</span>
-                    </div>
-                    <div className="detail-row">
                       <span className="detail-label">Total Emails:</span>
                       <span className="detail-value">{campaign.totalEmails}</span>
                     </div>
@@ -949,10 +920,10 @@ const EmailMarketingDashboard = () => {
                       onClick={() => toggleCampaignExpansion(campaign.id)}
                     >
                       <i className={`fas fa-chevron-${expandedCampaigns.has(campaign.id) ? 'up' : 'down'}`}></i>
-                      {expandedCampaigns.has(campaign.id) ? 'Hide' : 'Show'} Email Details 
+                      {expandedCampaigns.has(campaign.id) ? 'Hide' : 'View Full History'} 
                       {campaign.emailRecords && campaign.emailRecords.length > 0 
-                        ? `(${campaign.emailRecords.length} emails)` 
-                        : '(No detailed records available)'
+                        ? ` (${campaign.emailRecords.length} emails)` 
+                        : ''
                       }
                     </button>
                       
@@ -988,12 +959,6 @@ const EmailMarketingDashboard = () => {
                             <div className="no-email-records">
                               <i className="fas fa-info-circle"></i>
                               <p>No detailed email records available for this campaign.</p>
-                              <p>This might be because:</p>
-                              <ul>
-                                <li>The campaign was sent before this feature was added</li>
-                                <li>Email records were not saved properly</li>
-                                <li>The campaign is still in progress</li>
-                              </ul>
                             </div>
                           )}
                         </div>
