@@ -15,6 +15,14 @@ const EmailMarketingDashboard = () => {
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Define admin emails - must match admin page
+  const ADMIN_EMAILS = [
+    'admin@gmail.com',
+    'abdulqadir53970@gmail.com',
+    // Add more admin emails here
+  ];
 
   // Email campaign state
   const [emailList, setEmailList] = useState([]);
@@ -47,10 +55,16 @@ const EmailMarketingDashboard = () => {
       if (user) {
         setUserProfile(user);
         setIsAuthenticated(true);
+        
+        // Check if user is admin
+        const isUserAdmin = ADMIN_EMAILS.includes(user.email?.toLowerCase());
+        setIsAdmin(isUserAdmin);
+        
         loadUserData(user);
       } else {
         setUserProfile(null);
         setIsAuthenticated(false);
+        setIsAdmin(false);
         router.push('/auth');
       }
       setLoading(false);
@@ -253,14 +267,18 @@ const EmailMarketingDashboard = () => {
 
   const handlePreviewEmail = () => {
     try {
-      if (!emailContent.subject || !emailContent.htmlContent) {
-        console.error('Please enter both subject and content');
+      if (!emailContent.subject || !emailContent.subject.trim()) {
+        alert('Please enter an email subject before previewing');
+        return;
+      }
+      if (!emailContent.htmlContent || !emailContent.htmlContent.trim()) {
+        alert('Please enter email content before previewing');
         return;
       }
       setShowPreview(true);
     } catch (error) {
       console.error('Error previewing email:', error);
-      console.error('Error previewing email');
+      alert('Error opening preview. Please try again.');
     }
   };
 
@@ -591,6 +609,12 @@ const EmailMarketingDashboard = () => {
             <span>{userProfile?.displayName || userProfile?.email}</span>
             <span>Email Marketing Pro</span>
           </div>
+          {isAdmin && (
+            <button className="btn btn-outline" onClick={() => router.push('/admin')}>
+              <i className="fas fa-shield-alt"></i>
+              Admin
+            </button>
+          )}
           <button className="btn btn-register" onClick={() => router.push('/register')}>
             <i className="fas fa-user-plus"></i>
             Register
@@ -994,8 +1018,8 @@ const EmailMarketingDashboard = () => {
 
       {/* Email Preview Modal */}
       {showPreview && (
-        <div className="modal">
-          <div className="modal-content">
+        <div className="modal show" onClick={() => setShowPreview(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Email Preview</h3>
               <button className="close-btn" onClick={() => setShowPreview(false)}>

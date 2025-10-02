@@ -6,7 +6,8 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
-  updateProfile
+  updateProfile,
+  sendEmailVerification
 } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
@@ -17,11 +18,38 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [showVerificationMessage, setShowVerificationMessage] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState('');
 
   const switchTab = (tab) => {
     setActiveTab(tab);
     setErrorMessage('');
     setSuccessMessage('');
+    setShowVerificationMessage(false);
+  };
+
+  const handleResendVerification = async () => {
+    setLoading(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    
+    try {
+      const user = auth.currentUser;
+      if (user) {
+        await sendEmailVerification(user, {
+          url: window.location.origin + '/auth',
+          handleCodeInApp: false
+        });
+        setSuccessMessage('Verification email resent! Please check your inbox.');
+      } else {
+        setErrorMessage('Please sign up again to receive verification email.');
+      }
+    } catch (error) {
+      console.error('Error resending verification email:', error);
+      setErrorMessage('Failed to resend verification email. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogin = async (e) => {
@@ -68,6 +96,15 @@ export default function Auth() {
       ]);
       const user = userCredential.user;
 
+      // Check if email is verified
+      if (!user.emailVerified) {
+        setErrorMessage('Please verify your email before logging in. Check your inbox for the verification link.');
+        setShowVerificationMessage(true);
+        setVerificationEmail(email);
+        setLoading(false);
+        return;
+      }
+
       // Get user data from Firestore
       const usersRef = collection(db, 'users');
       const q = query(usersRef, where('email', '==', email));
@@ -80,6 +117,7 @@ export default function Auth() {
           uid: user.uid,
           email: user.email,
           displayName: user.displayName || doc.data().displayName,
+          emailVerified: user.emailVerified,
           ...doc.data()
         };
       } else {
@@ -87,7 +125,8 @@ export default function Auth() {
         userData = {
           uid: user.uid,
           email: user.email,
-          displayName: user.displayName || email.split('@')[0]
+          displayName: user.displayName || email.split('@')[0],
+          emailVerified: user.emailVerified
         };
       }
 
@@ -244,6 +283,12 @@ export default function Auth() {
         displayName: email.split('@')[0]
       });
 
+      // Send email verification
+      await sendEmailVerification(user, {
+        url: window.location.origin + '/auth',
+        handleCodeInApp: false
+      });
+
       // Create user data for Firestore
       const userData = {
         uid: user.uid,
@@ -255,6 +300,7 @@ export default function Auth() {
         company: '',
         phone: '',
         emailsPerDay: 10,
+        emailVerified: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
@@ -262,18 +308,12 @@ export default function Auth() {
       // Save user data to Firestore
       await addDoc(collection(db, 'users'), userData);
 
-      // Store user in localStorage for immediate access
-      localStorage.setItem('demoUser', JSON.stringify({
-        ...userData,
-        createdAt: new Date().toISOString()
-      }));
+      // Show verification message instead of redirecting
+      setShowVerificationMessage(true);
+      setVerificationEmail(email);
+      setSuccessMessage('Account created successfully! Please check your email to verify your account.');
       
-      setSuccessMessage('Account created successfully! Redirecting...');
-      
-      // Redirect after a short delay
-      setTimeout(() => {
-        router.push('/');
-      }, 1500);
+      // Don't redirect - keep user on page to see verification message
     } catch (error) {
       console.error('Signup error:', error);
       
@@ -483,8 +523,51 @@ export default function Auth() {
           {errorMessage && <div className="error-message">{errorMessage}</div>}
           {successMessage && <div className="success-message">{successMessage}</div>}
           
+          {/* Email Verification Message */}
+          {showVerificationMessage && (
+            <div className="verification-message">
+              <div className="verification-icon">
+                <i className="fas fa-envelope-circle-check"></i>
+              </div>
+              <h3>Verify Your Email</h3>
+              <p>
+                We've sent a verification link to <strong>{verificationEmail}</strong>
+              </p>
+              <p className="verification-instructions">
+                Please check your email and click the verification link to activate your account.
+                After verifying, you can log in to access the dashboard.
+              </p>
+              <div className="verification-actions">
+                <button 
+                  className="btn-resend" 
+                  onClick={handleResendVerification}
+                  disabled={loading}
+                >
+                  {loading ? 'Sending...' : 'Resend Verification Email'}
+                </button>
+                <button 
+                  className="btn-back" 
+                  onClick={() => {
+                    setShowVerificationMessage(false);
+                    setActiveTab('login');
+                  }}
+                >
+                  Back to Login
+                </button>
+              </div>
+              <div className="verification-tips">
+                <p><strong>Tips:</strong></p>
+                <ul>
+                  <li>Check your spam/junk folder if you don't see the email</li>
+                  <li>The verification link expires after 24 hours</li>
+                  <li>You can resend the verification email if needed</li>
+                </ul>
+              </div>
+            </div>
+          )}
+          
           {/* Login Form */}
-          {activeTab === 'login' && (
+          {!showVerificationMessage && activeTab === 'login' && (
             <form onSubmit={handleLogin}>
               <div className="form-group">
                 <label htmlFor="loginEmail">Email Address</label>
@@ -501,7 +584,7 @@ export default function Auth() {
           )}
           
           {/* Signup Form */}
-          {activeTab === 'signup' && (
+          {!showVerificationMessage && activeTab === 'signup' && (
             <form onSubmit={handleSignup}>
               <div className="form-group">
                 <label htmlFor="signupEmail">Email Address</label>
@@ -521,18 +604,22 @@ export default function Auth() {
             </form>
           )}
           
-          <div className="divider">
-            <span>OR</span>
-          </div>
-          
-          <button 
-            className="auth-btn google-btn" 
-            disabled={loading}
-            onClick={handleGoogleSignIn}
-          >
-            <i className="fab fa-google"></i>
-            Continue with Google
-          </button>
+          {!showVerificationMessage && (
+            <>
+              <div className="divider">
+                <span>OR</span>
+              </div>
+              
+              <button 
+                className="auth-btn google-btn" 
+                disabled={loading}
+                onClick={handleGoogleSignIn}
+              >
+                <i className="fab fa-google"></i>
+                Continue with Google
+              </button>
+            </>
+          )}
         </div>
       </div>
     </>
