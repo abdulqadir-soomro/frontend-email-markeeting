@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user owns the resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+    
+    // Domains collection
+    match /domains/{userId}/userDomains/{domainId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+    
+    // Subscribers collection
+    match /subscribers/{userId}/contacts/{subscriberId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+    
+    // Campaigns collection
+    match /campaigns/{userId}/userCampaigns/{campaignId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+      
+      // Campaign tracking subcollections
+      match /opens/{openId} {
+        allow read: if isOwner(userId);
+        allow create: if true; // Allow tracking pixel to write
+      }
+      
+      match /clicks/{clickId} {
+        allow read: if isOwner(userId);
+        allow create: if true; // Allow click tracking to write
+      }
+    }
+  }
+}
+

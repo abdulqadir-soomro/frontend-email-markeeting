@@ -27,6 +27,16 @@ service cloud.firestore {
       allow read, write: if true; // For now, allow all operations for testing
     }
     
+    // Allow reading/writing user templates
+    match /templates/{userId}/userTemplates/{templateId} {
+      allow read, write: if true; // For now, allow all operations for testing
+    }
+    
+    // Allow reading/writing Gmail credentials
+    match /gmailCredentials/{userId} {
+      allow read, write: if true; // For now, allow all operations for testing
+    }
+    
     // Allow reading/writing scheduled emails
     match /scheduledEmails/{scheduleId} {
       allow read, write: if true; // For now, allow all operations for testing

@@ -1,0 +1,266 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { calculatePercentage, formatDateTime } from "@/lib/utils";
+import { BarChart3, TrendingUp, Mail, MousePointer } from "lucide-react";
+
+interface Campaign {
+  id: string;
+  subject: string;
+  fromEmail: string;
+  status: string;
+  sentCount: number;
+  openCount: number;
+  clickCount: number;
+  createdAt: string;
+  sentAt?: string;
+}
+
+export default function ReportsPage() {
+  const { user } = useAuth();
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchCampaigns();
+  }, [user]);
+
+  const fetchCampaigns = async () => {
+    if (!user) return;
+
+    try {
+      const res = await fetch(`/api/campaigns/list?userId=${user.uid}`);
+      const data = await res.json();
+      // Only show sent campaigns
+      const sentCampaigns = data.campaigns?.filter(
+        (c: Campaign) => c.status === "sent"
+      );
+      setCampaigns(sentCampaigns || []);
+    } catch (error) {
+      console.error("Error fetching campaigns:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const totalSent = campaigns.reduce((sum, c) => sum + (c.sentCount || 0), 0);
+  const totalOpens = campaigns.reduce((sum, c) => sum + (c.openCount || 0), 0);
+  const totalClicks = campaigns.reduce(
+    (sum, c) => sum + (c.clickCount || 0),
+    0
+  );
+
+  const avgOpenRate = totalSent > 0 ? (totalOpens / totalSent) * 100 : 0;
+  const avgClickRate = totalSent > 0 ? (totalClicks / totalSent) * 100 : 0;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Reports & Analytics</h1>
+        <p className="text-gray-600 mt-2">
+          Track the performance of your email campaigns
+        </p>
+      </div>
+
+      {/* Summary Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              Total Sent
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-blue-100">
+              <Mail className="h-5 w-5 text-blue-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{totalSent}</div>
+            <p className="text-xs text-gray-500 mt-1">
+              Across {campaigns.length} campaigns
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              Total Opens
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-green-100">
+              <TrendingUp className="h-5 w-5 text-green-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{totalOpens}</div>
+            <p className="text-xs text-gray-500 mt-1">
+              {avgOpenRate.toFixed(1)}% open rate
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              Total Clicks
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-purple-100">
+              <MousePointer className="h-5 w-5 text-purple-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{totalClicks}</div>
+            <p className="text-xs text-gray-500 mt-1">
+              {avgClickRate.toFixed(1)}% click rate
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              Campaigns
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-orange-100">
+              <BarChart3 className="h-5 w-5 text-orange-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{campaigns.length}</div>
+            <p className="text-xs text-gray-500 mt-1">Sent campaigns</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Campaign Details */}
+      {campaigns.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <div className="p-4 bg-gray-100 rounded-full mb-4">
+              <BarChart3 className="h-12 w-12 text-gray-400" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2">No campaign data yet</h3>
+            <p className="text-gray-600 text-center">
+              Send your first campaign to see analytics here
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Campaign Performance</CardTitle>
+            <CardDescription>
+              Detailed metrics for each sent campaign
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Campaign</TableHead>
+                  <TableHead>Sent</TableHead>
+                  <TableHead>Opens</TableHead>
+                  <TableHead>Open Rate</TableHead>
+                  <TableHead>Clicks</TableHead>
+                  <TableHead>Click Rate</TableHead>
+                  <TableHead>Sent Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {campaigns.map((campaign) => {
+                  const openRate = calculatePercentage(
+                    campaign.openCount || 0,
+                    campaign.sentCount || 0
+                  );
+                  const clickRate = calculatePercentage(
+                    campaign.clickCount || 0,
+                    campaign.sentCount || 0
+                  );
+
+                  return (
+                    <TableRow key={campaign.id}>
+                      <TableCell className="font-medium">
+                        <div>
+                          <div>{campaign.subject}</div>
+                          <div className="text-xs text-gray-500">
+                            {campaign.fromEmail}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>{campaign.sentCount || 0}</TableCell>
+                      <TableCell>{campaign.openCount || 0}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[80px]">
+                            <div
+                              className="bg-green-600 h-2 rounded-full"
+                              style={{
+                                width: `${Math.min(
+                                  parseFloat(openRate),
+                                  100
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="text-sm font-medium">{openRate}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{campaign.clickCount || 0}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[80px]">
+                            <div
+                              className="bg-purple-600 h-2 rounded-full"
+                              style={{
+                                width: `${Math.min(
+                                  parseFloat(clickRate),
+                                  100
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="text-sm font-medium">
+                            {clickRate}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {campaign.sentAt
+                          ? formatDateTime(campaign.sentAt)
+                          : "N/A"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
