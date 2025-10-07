@@ -28,6 +28,13 @@ export async function POST(req: NextRequest) {
 
     const credentials = credDoc.data();
 
+    if (!credentials || !credentials.email || !credentials.appPassword) {
+      return NextResponse.json(
+        { success: false, error: "Gmail credentials are incomplete. Please reconnect Gmail in Settings." },
+        { status: 400 }
+      );
+    }
+
     // Create transporter
     const transporter = nodemailer.createTransport({
       service: 'gmail',
