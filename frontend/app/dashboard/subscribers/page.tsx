@@ -556,8 +556,8 @@ export default function SubscribersPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredSubscribers.map((subscriber) => (
-                      <TableRow key={subscriber.id}>
+                    filteredSubscribers.map((subscriber, index) => (
+                      <TableRow key={subscriber.id || `subscriber-${index}`}>
                         <TableCell>
                           <Checkbox
                             checked={selectedIds.has(subscriber.id)}

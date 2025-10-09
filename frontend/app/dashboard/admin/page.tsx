@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
+import { adminAPI } from "@/lib/api-client";
 import { 
   Users, 
   Mail, 
@@ -99,17 +100,11 @@ export default function AdminPage() {
     try {
       setLoading(true);
       
-      // Load all data in parallel
-      const [usersRes, campaignsRes, statsRes] = await Promise.all([
-        fetch('/api/admin/users'),
-        fetch('/api/admin/campaigns'),
-        fetch('/api/admin/stats'),
-      ]);
-
+      // Load all data in parallel using API client
       const [usersData, campaignsData, statsData] = await Promise.all([
-        usersRes.json(),
-        campaignsRes.json(),
-        statsRes.json(),
+        adminAPI.getUsers(),
+        adminAPI.getCampaigns(),
+        adminAPI.getStats(),
       ]);
 
       if (usersData.success) setUsers(usersData.users || []);

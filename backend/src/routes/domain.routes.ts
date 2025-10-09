@@ -29,8 +29,17 @@ router.get('/', paginationValidation, validate, domainController.list);
 // Get domain
 router.get('/:id', idParamValidation, validate, domainController.get);
 
-// Verify domain
+// Verify domain (automatic)
 router.post('/:id/verify', idParamValidation, validate, domainController.verify);
+
+// Manual domain verification
+router.post('/:id/verify-manual', idParamValidation, validate, domainController.verifyManual);
+
+// Reset domain verification status
+router.post('/:id/reset-verification', idParamValidation, validate, domainController.resetVerification);
+
+// Get DNS records for manual verification
+router.get('/:id/dns-records', idParamValidation, validate, domainController.getDNSRecords);
 
 // Add email to domain
 router.post(

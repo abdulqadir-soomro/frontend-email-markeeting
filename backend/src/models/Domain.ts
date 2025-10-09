@@ -7,6 +7,7 @@ export interface IDomain extends Document {
   dkimTokens: string[];
   dkimStatus: 'pending' | 'verified' | 'failed';
   emails: string[];
+  verificationMethod?: 'automatic' | 'manual';
   verifiedAt?: Date;
   lastCheckedAt?: Date;
   createdAt: Date;
@@ -47,6 +48,11 @@ const DomainSchema = new Schema<IDomain>(
       lowercase: true,
       trim: true,
     }],
+    verificationMethod: {
+      type: String,
+      enum: ['automatic', 'manual', 'godaddy', 'hostinger', 'cloudflare', 'namecheap', 'other'],
+      default: 'automatic',
+    },
     verifiedAt: {
       type: Date,
     },

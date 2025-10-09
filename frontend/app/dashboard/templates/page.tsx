@@ -91,6 +91,15 @@ export default function TemplatesPage() {
   };
 
   const handleDelete = async (templateId: string) => {
+    if (!templateId || templateId === 'undefined') {
+      toast({
+        title: "Error",
+        description: "Invalid template ID",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!confirm("Are you sure you want to delete this template?")) return;
 
     try {
@@ -217,8 +226,8 @@ export default function TemplatesPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {templates.map((template) => (
-            <Card key={template.id} className="hover:shadow-lg transition-shadow">
+          {templates.map((template, index) => (
+            <Card key={template.id || `template-${index}`} className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <CardTitle className="text-lg">{template.name}</CardTitle>
                 <CardDescription className="line-clamp-1">
@@ -253,6 +262,7 @@ export default function TemplatesPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => handleDelete(template.id)}
+                      disabled={!template.id || template.id === 'undefined'}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

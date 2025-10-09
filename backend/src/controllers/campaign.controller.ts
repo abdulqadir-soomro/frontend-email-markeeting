@@ -31,7 +31,10 @@ export class CampaignController {
 
     res.status(201).json({
       success: true,
-      data: campaign,
+      data: {
+        ...campaign.toObject(),
+        id: (campaign._id as any).toString(),
+      },
     });
   });
 
@@ -51,9 +54,15 @@ export class CampaignController {
 
     const total = await Campaign.countDocuments(query);
 
+    // Transform _id to id for frontend compatibility
+    const transformedCampaigns = campaigns.map(campaign => ({
+      ...campaign.toObject(),
+      id: (campaign._id as any).toString(),
+    }));
+
     res.json({
       success: true,
-      data: campaigns,
+      data: transformedCampaigns,
       pagination: {
         page: Number(page),
         limit: Number(limit),
@@ -79,7 +88,10 @@ export class CampaignController {
 
     res.json({
       success: true,
-      data: campaign,
+      data: {
+        ...campaign.toObject(),
+        id: (campaign._id as any).toString(),
+      },
     });
   });
 
@@ -227,9 +239,21 @@ export class CampaignController {
       .populate('subscriberId', 'name email status')
       .sort({ sentAt: -1 });
 
+    // Transform EmailRecord to Recipient format
+    const recipients = emailRecords.map(record => ({
+      email: record.recipientEmail,
+      name: record.subscriberId ? (record.subscriberId as any)?.name : record.recipientEmail.split('@')[0],
+      status: 'sent',
+      sentAt: record.sentAt,
+      openedAt: record.openedAt,
+      opened: record.opened,
+      clicked: record.clicked,
+      clickedAt: record.clickedAt,
+    }));
+
     res.json({
       success: true,
-      data: emailRecords,
+      data: recipients,
     });
   });
 
@@ -287,9 +311,9 @@ export class CampaignController {
     });
   });
 
-  // Quick send (send without creating campaign)
+  // Quick send (send to recipients and optionally link to existing campaign)
   quickSend = asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { recipients, subject, htmlContent, fromEmail, fromName, sendingMethod = 'ses' } = req.body;
+    const { recipients, subject, htmlContent, fromEmail, fromName, sendingMethod = 'ses', campaignId } = req.body;
     const userId = req.user._id;
 
     if (!recipients || recipients.length === 0) {
@@ -307,17 +331,18 @@ export class CampaignController {
       });
     }
 
-    // Send emails (without creating campaign or email records)
-    let result;
-    const tempCampaignId = 'quick-send-' + Date.now();
+    // Use provided campaignId or create a temporary one
+    const finalCampaignId = campaignId || 'quick-send-' + Date.now();
 
+    // Send emails
+    let result;
     if (sendingMethod === 'gmail') {
       result = await gmailService.sendBulkEmails({
         userId: userId.toString(),
         recipients,
         subject,
         htmlContent,
-        campaignId: tempCampaignId,
+        campaignId: finalCampaignId,
         apiUrl: environment.API_URL,
       });
     } else {
@@ -327,9 +352,30 @@ export class CampaignController {
         recipients,
         subject,
         htmlContent,
-        campaignId: tempCampaignId,
+        campaignId: finalCampaignId,
         apiUrl: environment.API_URL,
       });
+    }
+
+    // Create EmailRecord entries for tracking (without adding to subscribers)
+    if (result.success && result.totalSent > 0) {
+      const emailRecords = recipients.map((recipient: any) => ({
+        campaignId: finalCampaignId,
+        subscriberId: null, // No subscriber ID since we're not adding to subscribers
+        recipientEmail: recipient.email,
+        sentAt: new Date(),
+      }));
+
+      await EmailRecord.insertMany(emailRecords);
+
+      // Update campaign status if campaignId is provided (not temporary)
+      if (campaignId && campaignId !== 'quick-send-' + Date.now()) {
+        await Campaign.findByIdAndUpdate(campaignId, {
+          status: 'sent',
+          sentCount: result.totalSent,
+          sentAt: new Date(),
+        });
+      }
     }
 
     res.json({

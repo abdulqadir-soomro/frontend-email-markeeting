@@ -29,12 +29,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { Plus, CheckCircle, Clock, RefreshCw, Trash2, Copy, Zap, FileText, Globe, Mail, X } from "lucide-react";
 import { domainAPI } from "@/lib/api-client";
@@ -45,7 +39,7 @@ interface Domain {
   status: string;
   dkimTokens: string[];
   createdAt: string;
-  emailAddresses?: string[];
+  emails?: string[];
 }
 
 export default function DomainsPage() {
@@ -61,6 +55,10 @@ export default function DomainsPage() {
   const [selectedEmailDomain, setSelectedEmailDomain] = useState<Domain | null>(null);
   const [customEmailPrefix, setCustomEmailPrefix] = useState("");
   const [savingEmail, setSavingEmail] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null);
+  const [domainToReset, setDomainToReset] = useState<Domain | null>(null);
 
   useEffect(() => {
     fetchDomains();
@@ -139,12 +137,54 @@ export default function DomainsPage() {
     }
   };
 
-  const handleDeleteDomain = async (domain: Domain) => {
-    if (!user) return;
-    if (!confirm(`Are you sure you want to delete ${domain.domain}?`)) return;
+  const handleResetVerification = (domain: Domain) => {
+    setDomainToReset(domain);
+    setResetConfirmOpen(true);
+  };
+
+  const confirmResetVerification = async () => {
+    if (!user || !domainToReset) return;
 
     try {
-      const data = await domainAPI.delete(domain.id);
+      const data = await domainAPI.resetVerification(domainToReset.id);
+
+      toast({
+        title: "Verification Reset",
+        description: data.message || "Domain verification status has been reset to pending",
+      });
+
+      fetchDomains();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reset domain verification",
+        variant: "destructive",
+      });
+    } finally {
+      setResetConfirmOpen(false);
+      setDomainToReset(null);
+    }
+  };
+
+
+  const handleDeleteDomain = (domain: Domain) => {
+    if (!domain.id || domain.id === 'undefined') {
+      toast({
+        title: "Error",
+        description: "Invalid domain ID",
+        variant: "destructive",
+      });
+      return;
+    }
+    setDomainToDelete(domain);
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDeleteDomain = async () => {
+    if (!user || !domainToDelete) return;
+
+    try {
+      const data = await domainAPI.delete(domainToDelete.id);
 
       toast({
         title: "Success",
@@ -158,6 +198,9 @@ export default function DomainsPage() {
         description: error.message || "Failed to delete domain",
         variant: "destructive",
       });
+    } finally {
+      setDeleteConfirmOpen(false);
+      setDomainToDelete(null);
     }
   };
 
@@ -172,6 +215,7 @@ export default function DomainsPage() {
   const suggestedEmailPrefixes = ["hello", "marketing", "newsletter", "team", "support", "info", "contact"];
 
   const handleViewEmails = (domain: Domain) => {
+    console.log("Managing emails for domain:", domain); // Debug log
     setSelectedEmailDomain(domain);
     setEmailDialogOpen(true);
   };
@@ -180,7 +224,7 @@ export default function DomainsPage() {
     if (!selectedEmailDomain || !user || !prefix) return;
 
     const emailAddress = `${prefix}@${selectedEmailDomain.domain}`;
-    const currentEmails = selectedEmailDomain.emailAddresses || [];
+    const currentEmails = selectedEmailDomain.emails || [];
 
     if (currentEmails.includes(emailAddress)) {
       toast({
@@ -206,7 +250,7 @@ export default function DomainsPage() {
       // Update local state
       setSelectedEmailDomain({
         ...selectedEmailDomain,
-        emailAddresses: data.data?.emails || [...currentEmails, emailAddress],
+        emails: data.data?.emails || [...currentEmails, emailAddress],
       });
     } catch (error: any) {
       toast({
@@ -235,7 +279,7 @@ export default function DomainsPage() {
       // Update local state
       setSelectedEmailDomain({
         ...selectedEmailDomain,
-        emailAddresses: data.data?.emails || (selectedEmailDomain.emailAddresses || []).filter(e => e !== emailAddress),
+        emails: data.data?.emails || (selectedEmailDomain.emails || []).filter(e => e !== emailAddress),
       });
     } catch (error: any) {
       toast({
@@ -389,10 +433,22 @@ export default function DomainsPage() {
                       >
                         <RefreshCw className="h-4 w-4" />
                       </Button>
+                      {domain.status === 'verified' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleResetVerification(domain)}
+                          title="Reset verification status"
+                          className="text-orange-600 hover:text-orange-700"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => handleDeleteDomain(domain)}
+                        disabled={!domain.id || domain.id === 'undefined'}
                         title="Delete domain"
                       >
                         <Trash2 className="h-4 w-4 text-red-600" />
@@ -417,20 +473,11 @@ export default function DomainsPage() {
           <DialogHeader>
             <DialogTitle>Setup DNS Records for {selectedDomain?.domain}</DialogTitle>
             <DialogDescription>
-              Add records manually to verify your domain
+              Add DNS records manually to verify your domain
             </DialogDescription>
           </DialogHeader>
           
-          <Tabs defaultValue="manual" className="w-full">
-            <TabsList className="grid w-full grid-cols-1">
-              <TabsTrigger value="manual" className="flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Manual Setup
-              </TabsTrigger>
-            </TabsList>
-
-            {/* MANUAL SETUP TAB */}
-            <TabsContent value="manual" className="max-h-[60vh] overflow-y-auto pr-2 space-y-6 mt-4">
+          <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-6">
             {/* SPF Record */}
             <div className="border rounded-lg p-4 bg-white shadow-sm">
               <div className="flex items-center justify-between mb-3">
@@ -589,8 +636,7 @@ export default function DomainsPage() {
                 </li>
               </ul>
             </div>
-          </TabsContent>
-          </Tabs>
+          </div>
           
           <DialogFooter className="border-t pt-4 mt-4">
             <Button variant="outline" onClick={() => {
@@ -612,7 +658,7 @@ export default function DomainsPage() {
         setSelectedEmailDomain(null);
         setCustomEmailPrefix("");
       }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Email Addresses for {selectedEmailDomain?.domain}</DialogTitle>
             <DialogDescription>
@@ -620,19 +666,19 @@ export default function DomainsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6">
+          <div className="space-y-6 overflow-y-auto flex-1 pr-2">
             {/* Current Email Addresses */}
-            {selectedEmailDomain?.emailAddresses && selectedEmailDomain.emailAddresses.length > 0 && (
+            {selectedEmailDomain?.emails && selectedEmailDomain.emails.length > 0 && (
               <div>
                 <Label className="text-sm font-semibold mb-3 block">Your Email Addresses:</Label>
-                <div className="space-y-2">
-                  {selectedEmailDomain.emailAddresses.map((email) => (
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                  {selectedEmailDomain.emails.map((email) => (
                     <div key={email} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <Mail className="h-4 w-4 text-green-600" />
-                        <span className="font-mono text-sm">{email}</span>
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Mail className="h-4 w-4 text-green-600 flex-shrink-0" />
+                        <span className="font-mono text-sm truncate">{email}</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         <Button
                           size="sm"
                           variant="ghost"
@@ -657,26 +703,26 @@ export default function DomainsPage() {
             {/* Suggested Email Addresses */}
             <div>
               <Label className="text-sm font-semibold mb-3 block">Quick Add - Suggested:</Label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-2">
                 {suggestedEmailPrefixes.map((prefix) => {
                   const emailAddress = `${prefix}@${selectedEmailDomain?.domain}`;
-                  const isAdded = selectedEmailDomain?.emailAddresses?.includes(emailAddress);
+                  const isAdded = selectedEmailDomain?.emails?.includes(emailAddress);
                   
                   return (
                     <Button
                       key={prefix}
                       size="sm"
                       variant={isAdded ? "secondary" : "outline"}
-                      className="justify-start"
+                      className="justify-start text-left"
                       onClick={() => !isAdded && handleAddEmailAddress(prefix)}
                       disabled={isAdded || savingEmail}
                     >
                       {isAdded ? (
-                        <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
+                        <CheckCircle className="h-4 w-4 mr-2 text-green-600 flex-shrink-0" />
                       ) : (
-                        <Plus className="h-4 w-4 mr-2" />
+                        <Plus className="h-4 w-4 mr-2 flex-shrink-0" />
                       )}
-                      {emailAddress}
+                      <span className="truncate">{emailAddress}</span>
                     </Button>
                   );
                 })}
@@ -749,6 +795,59 @@ export default function DomainsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Domain</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{domainToDelete?.domain}</strong>? 
+              This action cannot be undone and will remove all associated email addresses.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={confirmDeleteDomain}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Domain
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Verification Confirmation Dialog */}
+      <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Verification Status</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to reset the verification status for <strong>{domainToReset?.domain}</strong>? 
+              This will change the domain status back to "Pending" and you'll need to verify it again.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={confirmResetVerification}
+              className="text-orange-600 border-orange-600 hover:bg-orange-50"
+            >
+              <X className="h-4 w-4 mr-2" />
+              Reset Verification
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

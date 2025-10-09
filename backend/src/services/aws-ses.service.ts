@@ -45,14 +45,15 @@ export class AWSSESService {
 
   // Check domain status
   async checkDomainStatus(domain: string) {
-    // If no AWS credentials, simulate verification for testing
+    // If no AWS credentials, return verification pending
     if (!sesClient) {
-      console.warn('AWS SES not configured - simulating domain verification');
+      console.warn('AWS SES not configured - domain verification pending');
       return {
-        success: true,
-        verificationStatus: 'SUCCESS', // Simulate verified domain
-        dkimStatus: 'SUCCESS',
-        dkimTokens: ['token1', 'token2', 'token3'],
+        success: false,
+        verificationStatus: 'PENDING',
+        dkimStatus: 'PENDING',
+        dkimTokens: [],
+        message: 'AWS SES not configured. Please configure AWS credentials to verify domains.',
       };
     }
 
@@ -100,6 +101,69 @@ export class AWSSESService {
     } catch (error: any) {
       console.error('Error deleting domain:', error);
       throw new Error(`Failed to delete domain: ${error.message}`);
+    }
+  }
+
+  // Get domain DNS records for manual verification
+  async getDomainDNSRecords(domain: string) {
+    // If no AWS credentials, return default records for testing
+    if (!sesClient) {
+      console.warn('AWS SES not configured - returning default DNS records');
+      return {
+        success: true,
+        dnsRecords: [
+          {
+            type: 'TXT',
+            name: '@',
+            value: 'v=spf1 include:amazonses.com ~all',
+            purpose: 'SPF Record',
+          },
+          {
+            type: 'TXT',
+            name: '_dmarc',
+            value: `v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain}`,
+            purpose: 'DMARC Record',
+          },
+        ],
+      };
+    }
+
+    try {
+      const command = new GetEmailIdentityCommand({
+        EmailIdentity: domain,
+      });
+
+      const response = await sesClient.send(command);
+      const dkimTokens = response.DkimAttributes?.Tokens || [];
+
+      const dnsRecords = [
+        {
+          type: 'TXT',
+          name: '@',
+          value: 'v=spf1 include:amazonses.com ~all',
+          purpose: 'SPF Record',
+        },
+        {
+          type: 'TXT',
+          name: '_dmarc',
+          value: `v=DMARC1; p=quarantine; rua=mailto:dmarc@${domain}`,
+          purpose: 'DMARC Record',
+        },
+        ...dkimTokens.map(token => ({
+          type: 'CNAME',
+          name: `${token}._domainkey`,
+          value: `${token}.dkim.amazonses.com`,
+          purpose: 'DKIM Record',
+        })),
+      ];
+
+      return {
+        success: true,
+        dnsRecords,
+      };
+    } catch (error: any) {
+      console.error('Error getting domain DNS records:', error);
+      throw new Error(`Failed to get DNS records: ${error.message}`);
     }
   }
 

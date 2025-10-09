@@ -1,8 +1,8 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IEmailRecord extends Document {
-  campaignId: mongoose.Types.ObjectId;
-  subscriberId: mongoose.Types.ObjectId;
+  campaignId: mongoose.Types.ObjectId | string;
+  subscriberId?: mongoose.Types.ObjectId;
   recipientEmail: string;
   opened: boolean;
   openedAt?: Date;
@@ -21,15 +21,14 @@ export interface IEmailRecord extends Document {
 const EmailRecordSchema = new Schema<IEmailRecord>(
   {
     campaignId: {
-      type: Schema.Types.ObjectId,
-      ref: 'Campaign',
+      type: Schema.Types.Mixed,
       required: true,
       index: true,
     },
     subscriberId: {
       type: Schema.Types.ObjectId,
       ref: 'Subscriber',
-      required: true,
+      required: false,
     },
     recipientEmail: {
       type: String,

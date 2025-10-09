@@ -110,6 +110,77 @@ export class TrackingController {
 
     res.end(pixel);
   }
+
+  // Test tracking endpoint (for debugging)
+  testTracking = asyncHandler(async (req: Request, res: Response) => {
+    const { campaignId, email } = req.query;
+    
+    console.log(`🧪 Test tracking called - Campaign: ${campaignId}, Email: ${email}`);
+    
+    if (!campaignId || !email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing campaignId or email parameter',
+      });
+    }
+
+    try {
+      // For test tracking, create a mock email record if it doesn't exist
+      let emailRecord = await EmailRecord.findOne({
+        campaignId: campaignId as string,
+        recipientEmail: email as string,
+      });
+
+      // If no email record exists and this is a test campaign, create a mock one
+      if (!emailRecord && campaignId.toString().startsWith('test-campaign-')) {
+        console.log(`🧪 Creating mock email record for test campaign: ${campaignId}`);
+        
+        // Create a mock email record for testing
+        emailRecord = new EmailRecord({
+          campaignId: campaignId as string,
+          recipientEmail: email as string,
+          recipientName: 'Test User',
+          subject: 'Test Campaign',
+          opened: false,
+          clicked: false,
+          sentAt: new Date(),
+        });
+        
+        await emailRecord.save();
+        console.log(`📧 Mock email record created for testing`);
+      }
+
+      if (emailRecord) {
+        console.log(`📧 Found email record:`, emailRecord);
+        
+        // Mark as opened
+        emailRecord.opened = true;
+        emailRecord.openedAt = new Date();
+        emailRecord.openCount = (emailRecord.openCount || 0) + 1;
+        await emailRecord.save();
+
+        // Increment campaign open count (only for real campaigns, not test ones)
+        if (!campaignId.toString().startsWith('test-campaign-')) {
+          await Campaign.findByIdAndUpdate(campaignId, {
+            $inc: { openCount: 1 },
+          });
+        }
+
+        console.log(`✅ Test tracking successful - Campaign: ${campaignId}, Email: ${email}`);
+      } else {
+        console.log(`❌ No email record found for Campaign: ${campaignId}, Email: ${email}`);
+      }
+    } catch (error) {
+      console.error('Error in test tracking:', error);
+    }
+
+    res.json({
+      success: true,
+      message: 'Test tracking completed',
+      campaignId,
+      email,
+    });
+  });
 }
 
 export default new TrackingController();

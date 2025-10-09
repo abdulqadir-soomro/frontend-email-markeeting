@@ -24,7 +24,10 @@ export class TemplateController {
 
     res.status(201).json({
       success: true,
-      data: template,
+      data: {
+        ...template.toObject(),
+        id: (template._id as any).toString(),
+      },
     });
   });
 
@@ -43,9 +46,15 @@ export class TemplateController {
 
     const total = await Template.countDocuments(query);
 
+    // Transform _id to id for frontend compatibility
+    const transformedTemplates = templates.map(template => ({
+      ...template.toObject(),
+      id: (template._id as any).toString(),
+    }));
+
     res.json({
       success: true,
-      data: templates,
+      data: transformedTemplates,
       pagination: {
         page: Number(page),
         limit: Number(limit),
@@ -71,7 +80,10 @@ export class TemplateController {
 
     res.json({
       success: true,
-      data: template,
+      data: {
+        ...template.toObject(),
+        id: (template._id as any).toString(),
+      },
     });
   });
 
@@ -99,7 +111,10 @@ export class TemplateController {
 
     res.json({
       success: true,
-      data: template,
+      data: {
+        ...template.toObject(),
+        id: (template._id as any).toString(),
+      },
     });
   });
 
@@ -244,10 +259,16 @@ export class TemplateController {
 
     const templates = await Template.find({ userId, isDefault: true });
 
+    // Transform _id to id for frontend compatibility
+    const transformedTemplates = templates.map(template => ({
+      ...template.toObject(),
+      id: (template._id as any).toString(),
+    }));
+
     res.status(201).json({
       success: true,
       message: '5 default templates created successfully',
-      data: templates,
+      data: transformedTemplates,
     });
   });
 }

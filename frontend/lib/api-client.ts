@@ -202,6 +202,19 @@ export const domainAPI = {
       method: 'DELETE',
       body: JSON.stringify({ email }),
     }),
+
+  // Manual verification
+  verifyManual: (id: string, data: { verificationMethod: string; dnsRecords: any[] }) =>
+    apiFetch(`/domains/${id}/verify-manual`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Get DNS records for manual verification
+  getDNSRecords: (id: string) => apiFetch(`/domains/${id}/dns-records`),
+  resetVerification: (id: string) => apiFetch(`/domains/${id}/reset-verification`, {
+    method: 'POST',
+  }),
 };
 
 // Gmail API
@@ -217,6 +230,13 @@ export const gmailAPI = {
   disconnect: () => apiFetch('/gmail/disconnect', { method: 'DELETE' }),
 
   test: () => apiFetch('/gmail/test'),
+};
+
+// Admin API
+export const adminAPI = {
+  getStats: () => apiFetch('/admin/stats'),
+  getUsers: () => apiFetch('/admin/users'),
+  getCampaigns: () => apiFetch('/admin/campaigns'),
 };
 
 export default {

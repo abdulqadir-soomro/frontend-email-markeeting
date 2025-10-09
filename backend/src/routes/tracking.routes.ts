@@ -9,5 +9,8 @@ router.get('/open/:campaignId', trackingController.trackOpen);
 // Track link click (no authentication required)
 router.get('/click', trackingController.trackClick);
 
+// Test tracking endpoint (for debugging)
+router.get('/test', trackingController.testTracking);
+
 export default router;
 

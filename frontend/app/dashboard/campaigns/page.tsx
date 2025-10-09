@@ -59,7 +59,7 @@ interface Domain {
   id: string;
   domain: string;
   status: string;
-  emailAddresses?: string[];
+  emails?: string[];
 }
 
 interface Template {
@@ -76,6 +76,9 @@ interface Recipient {
   status: string;
   sentAt?: string;
   openedAt?: string;
+  opened?: boolean;
+  clicked?: boolean;
+  clickedAt?: string;
 }
 
 export default function CampaignsPage() {
@@ -92,6 +95,7 @@ export default function CampaignsPage() {
   // Form state
   const [subject, setSubject] = useState("");
   const [fromName, setFromName] = useState("");
+  const [selectedDomain, setSelectedDomain] = useState("");
   const [fromDomain, setFromDomain] = useState("");
   const [htmlContent, setHtmlContent] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -99,6 +103,7 @@ export default function CampaignsPage() {
   const [previewHtml, setPreviewHtml] = useState("");
   const [sendMethodDialogOpen, setSendMethodDialogOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [recipientCount, setRecipientCount] = useState<number>(0);
   const [sendingMethod, setSendingMethod] = useState<"gmail" | "aws">("aws");
   const [gmailConnected, setGmailConnected] = useState(false);
   const [gmailEmail, setGmailEmail] = useState("");
@@ -159,6 +164,7 @@ export default function CampaignsPage() {
       const verifiedDomains = data.data?.filter(
         (d: Domain) => d.status === "verified"
       );
+      console.log("Fetched domains:", verifiedDomains); // Debug log
       setDomains(verifiedDomains || []);
     } catch (error) {
       console.error("Error fetching domains:", error);
@@ -216,10 +222,10 @@ export default function CampaignsPage() {
       }
     } else {
       // AWS SES validation
-      if (!subject || !fromDomain || !htmlContent || !user) {
+      if (!subject || !selectedDomain || !fromDomain || !htmlContent || !user) {
         toast({
           title: "Error",
-          description: "Please fill in all required fields",
+          description: "Please select a domain and email address",
           variant: "destructive",
         });
         return;
@@ -253,6 +259,7 @@ export default function CampaignsPage() {
       // Reset form
       setSubject("");
       setFromName("");
+      setSelectedDomain("");
       setFromDomain("");
       setHtmlContent("");
       setSelectedTemplate("");
@@ -275,16 +282,47 @@ export default function CampaignsPage() {
     
     try {
       const data = await gmailAPI.getStatus();
-      setGmailConnected(data.connected || false);
-      setGmailEmail(data.email || "");
+      setGmailConnected(data.data?.connected || false);
+      setGmailEmail(data.data?.email || "");
     } catch (error) {
       console.error("Error checking Gmail status:", error);
     }
   };
 
-  const handleSendClick = (campaign: Campaign) => {
+  const handleSendClick = async (campaign: Campaign) => {
     setSelectedCampaign(campaign);
     setSendMethodDialogOpen(true);
+    
+    // Fetch recipient count for this campaign
+    try {
+      const recipientsData = await campaignAPI.getRecipients(campaign.id);
+      if (recipientsData.success && recipientsData.data) {
+        setRecipientCount(recipientsData.data.length);
+      } else {
+        setRecipientCount(0);
+      }
+    } catch (error) {
+      console.error("Error fetching recipient count:", error);
+      setRecipientCount(0);
+    }
+  };
+
+  const renderEmailOptions = () => {
+    const domain = domains.find(d => d.domain === selectedDomain);
+    if (!domain) return null;
+    
+    const emails = domain.emails || [];
+    return emails.length > 0 ? (
+      emails.map((email) => (
+        <SelectItem key={email} value={email}>
+          📧 {email}
+        </SelectItem>
+      ))
+    ) : (
+      <SelectItem value={`noreply@${selectedDomain}`}>
+        📧 noreply@{selectedDomain}
+      </SelectItem>
+    );
   };
 
   const handleSendCampaign = async () => {
@@ -307,19 +345,9 @@ export default function CampaignsPage() {
       setSendProgress({ sent: 0, total: activeSubscribers.length, failed: 0 });
       setCurrentSendingEmail(`Sending to ${activeSubscribers.length} subscribers...`);
 
-      const res = await fetch("/api/campaigns/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          campaignId: selectedCampaign.id,
-          sendingMethod: sendingMethod,
-        }),
-      });
+      const data = await campaignAPI.send(selectedCampaign.id, sendingMethod === "aws" ? "ses" : sendingMethod);
 
-      const data = await res.json();
-
-      if (!res.ok) {
+      if (!data.success) {
         throw new Error(data.error || "Failed to send campaign");
       }
 
@@ -357,25 +385,18 @@ export default function CampaignsPage() {
     if (!confirm(`Delete campaign "${campaign.subject}"?`)) return;
 
     try {
-      const res = await fetch("/api/campaigns/delete", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          campaignId: campaign.id,
-        }),
-      });
+      const data = await campaignAPI.delete(campaign.id);
 
-      if (!res.ok) {
-        throw new Error("Failed to delete campaign");
-      }
-
+      if (data.success) {
       toast({
         title: "Success",
         description: "Campaign deleted successfully",
       });
 
       fetchCampaigns();
+      } else {
+        throw new Error(data.error || "Failed to delete campaign");
+      }
     } catch (error: any) {
       toast({
         title: "Error",
@@ -391,13 +412,14 @@ export default function CampaignsPage() {
     setLoadingRecipients(true);
 
     try {
-      const res = await fetch(`/api/campaigns/recipients?userId=${user?.id}&campaignId=${campaign.id}`);
-      const data = await res.json();
+      const data = await campaignAPI.getRecipients(campaign.id);
       
       if (data.success) {
-        setRecipients(data.recipients || []);
+        setRecipients(data.data || []);
+      } else {
+        throw new Error(data.error || "Failed to fetch recipients");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching recipients:", error);
       toast({
         title: "Error",
@@ -508,20 +530,18 @@ export default function CampaignsPage() {
     }
 
     try {
-      // Fetch campaign statistics with both userId and campaignId
-      const response = await fetch(`/api/campaigns/recipients?userId=${user.id}&campaignId=${campaign.id}`);
-      const data = await response.json();
+      // Fetch campaign analytics
+      const data = await campaignAPI.getAnalytics(campaign.id);
 
-      console.log("Campaign stats response:", data);
-
-      if (response.ok && data.recipients) {
-        const totalSent = data.recipients.length;
-        const opened = data.recipients.filter((r: any) => r.opened).length;
-        const clicked = data.recipients.filter((r: any) => r.clicked).length;
+      if (data.success && data.data) {
+        const analytics = data.data.analytics;
+        const totalSent = analytics.totalSent || 0;
+        const opened = analytics.totalOpened || 0;
+        const clicked = analytics.totalClicked || 0;
         const openRate = totalSent > 0 ? (opened / totalSent) * 100 : 0;
         const clickRate = totalSent > 0 ? (clicked / totalSent) * 100 : 0;
 
-        console.log(`Stats calculated: Sent: ${totalSent}, Opened: ${opened}, Clicked: ${clicked}`);
+        console.log(`Analytics: Sent: ${totalSent}, Opened: ${opened}, Clicked: ${clicked}`);
 
         setCampaignStats({
           totalSent,
@@ -531,12 +551,58 @@ export default function CampaignsPage() {
           clickRate,
         });
       } else {
-        console.error("Failed to load recipients:", data);
+        console.error("Failed to fetch campaign analytics:", data);
+        setCampaignStats({
+          totalSent: 0,
+          opened: 0,
+          clicked: 0,
+          openRate: 0,
+          clickRate: 0,
+        });
       }
     } catch (error) {
       console.error("Error fetching campaign stats:", error);
     } finally {
       setLoadingStats(false);
+    }
+  };
+
+  const handleSimulateTracking = async (campaign: Campaign) => {
+    if (!user?.id) return;
+
+    try {
+      // Get campaign recipients
+      const recipientsData = await campaignAPI.getRecipients(campaign.id);
+      
+      if (recipientsData.success && recipientsData.data) {
+        const recipients = recipientsData.data;
+        
+        // Simulate tracking for each recipient
+        for (const recipient of recipients) {
+          try {
+            await fetch(`http://localhost:5000/api/track/test?campaignId=${campaign.id}&email=${encodeURIComponent(recipient.recipientEmail)}`);
+          } catch (error) {
+            console.error(`Failed to simulate tracking for ${recipient.recipientEmail}:`, error);
+          }
+        }
+
+        toast({
+          title: "Tracking Simulated",
+          description: `Simulated email opens for ${recipients.length} recipients`,
+        });
+
+        // Refresh analytics
+        setTimeout(() => {
+          handleViewCampaignDetails(campaign);
+        }, 1000);
+      }
+    } catch (error) {
+      console.error("Error simulating tracking:", error);
+      toast({
+        title: "Error",
+        description: "Failed to simulate tracking",
+        variant: "destructive",
+      });
     }
   };
 
@@ -584,98 +650,47 @@ export default function CampaignsPage() {
 
     try {
       const fromEmail = sendingMethod === "gmail" ? gmailEmail : fromDomain;
-      let sent = 0;
-      let failed = 0;
-
-      // Send emails one by one to show real-time progress
-      for (let i = 0; i < csvRecipients.length; i++) {
-        const recipient = csvRecipients[i];
-        setCurrentSendingEmail(`📧 Sending to ${recipient.email}... (${i + 1}/${csvRecipients.length})`);
-
-        try {
-          let personalizedContent = htmlContent.replace(/\{\{name\}\}/g, recipient.name || recipient.email.split('@')[0]);
-
-          if (sendingMethod === "gmail") {
-            const response = await fetch("/api/gmail/send", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                userId: user.id,
-                to: recipient.email,
+      
+      // Create a campaign first
+      const campaignData = await campaignAPI.create({
                 subject,
-                htmlContent: personalizedContent,
-                recipientName: recipient.name || recipient.email.split('@')[0],
-              }),
-            });
-            const data = await response.json();
-            if (data.success) {
-              sent++;
-              setSendingLogs(prev => [...prev, { 
-                email: recipient.email, 
-                status: "success", 
-                timestamp: new Date().toLocaleTimeString() 
-              }]);
-            } else {
-              failed++;
-              setSendingLogs(prev => [...prev, { 
-                email: recipient.email, 
-                status: "failed", 
-                timestamp: new Date().toLocaleTimeString() 
-              }]);
-            }
-            // Rate limiting for Gmail
-            await new Promise(resolve => setTimeout(resolve, 1500));
-          } else {
-            // AWS SES - send via API
-            const response = await fetch("/api/campaigns/send-single", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                from: fromEmail,
-                to: recipient.email,
-                subject,
-                htmlContent: personalizedContent,
-              }),
-            });
-            const data = await response.json();
-            if (data.success) {
-              sent++;
-              setSendingLogs(prev => [...prev, { 
-                email: recipient.email, 
-                status: "success", 
-                timestamp: new Date().toLocaleTimeString() 
-              }]);
-            } else {
-              failed++;
-              setSendingLogs(prev => [...prev, { 
-                email: recipient.email, 
-                status: "failed", 
-                timestamp: new Date().toLocaleTimeString() 
-              }]);
-            }
-            // Small delay to avoid overwhelming SES
-            await new Promise(resolve => setTimeout(resolve, 200));
-          }
+        fromEmail,
+        fromName: fromName || (sendingMethod === "gmail" ? gmailEmail.split('@')[0] : fromEmail.split('@')[0]),
+        htmlContent,
+        templateId: selectedTemplate,
+      });
 
-          setSendProgress({ sent, total: csvRecipients.length, failed });
-        } catch (error) {
-          console.error(`Failed to send to ${recipient.email}:`, error);
-          failed++;
-          setSendProgress({ sent, total: csvRecipients.length, failed });
-          setSendingLogs(prev => [...prev, { 
-            email: recipient.email, 
-            status: "failed", 
-            timestamp: new Date().toLocaleTimeString() 
-          }]);
-        }
+      if (!campaignData.success) {
+        throw new Error(campaignData.error || "Failed to create campaign");
       }
 
-      setCurrentSendingEmail(`✅ Completed! Sent: ${sent}, Failed: ${failed}`);
+      // Send emails directly to CSV recipients without adding them as subscribers
+      const data = await campaignAPI.quickSend({
+        fromEmail,
+        fromName: fromName || (sendingMethod === "gmail" ? gmailEmail.split('@')[0] : fromEmail.split('@')[0]),
+                subject,
+        htmlContent,
+        recipients: csvRecipients,
+        sendingMethod,
+        campaignId: campaignData.data.id, // Link to the created campaign
+      });
+
+            if (data.success) {
+        setSendProgress({ sent: data.sent || csvRecipients.length, total: csvRecipients.length, failed: data.failed || 0 });
+        setCurrentSendingEmail("✅ All emails sent successfully!");
+            } else {
+        throw new Error(data.error || "Failed to send emails");
+      }
+
+      setCurrentSendingEmail(`✅ Completed! Sent: ${data.sent || csvRecipients.length}, Failed: ${data.failed || 0}`);
 
       toast({
         title: "Success! 🎉",
-        description: `Sent to ${sent} recipients. ${failed} failed.`,
+        description: `Campaign created and sent to ${data.sent || csvRecipients.length} recipients. ${data.failed || 0} failed.`,
       });
+
+      // Refresh campaigns list to show the new campaign
+      fetchCampaigns();
 
       // Reset form
       setTimeout(() => {
@@ -684,6 +699,7 @@ export default function CampaignsPage() {
         setQuickSendFile(null);
         setSubject("");
         setHtmlContent("");
+        setSelectedDomain("");
         setFromDomain("");
         if (quickSendFileRef.current) {
           quickSendFileRef.current.value = "";
@@ -697,6 +713,7 @@ export default function CampaignsPage() {
         description: error.message,
         variant: "destructive",
       });
+      
       setTimeout(() => {
         setSendingProgress(false);
       }, 2000);
@@ -866,8 +883,9 @@ export default function CampaignsPage() {
               </div>
 
               {sendingMethod === "aws" && (
+                <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="fromEmail">From Email Address *</Label>
+                    <Label htmlFor="selectedDomain">Domain *</Label>
                   {domains.length === 0 ? (
                     <p className="text-sm text-red-600">
                       You need to verify a domain first. Go to{" "}
@@ -877,40 +895,46 @@ export default function CampaignsPage() {
                       .
                     </p>
                   ) : (
-                    <>
                       <Select
-                        value={fromDomain}
+                        value={selectedDomain}
                         onValueChange={(value) => {
-                          setFromDomain(value);
+                          setSelectedDomain(value);
+                          setFromDomain(""); // Reset email selection when domain changes
                         }}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select email address" />
+                          <SelectValue placeholder="Select domain" />
                         </SelectTrigger>
                         <SelectContent>
-                          {domains.map((domain) => {
-                            const emailAddresses = domain.emailAddresses || [];
-                            return (
-                              <div key={domain.id}>
-                                {emailAddresses.length > 0 ? (
-                                  <>
-                                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 border-b">
-                                      {domain.domain}
-                                    </div>
-                                    {emailAddresses.map((email) => (
-                                      <SelectItem key={email} value={email}>
-                                        📧 {email}
+                          {domains.map((domain) => (
+                            <SelectItem key={domain.id} value={domain.domain}>
+                              🌐 {domain.domain}
                                       </SelectItem>
                                     ))}
-                                  </>
-                                ) : (
-                                  <SelectItem key={`${domain.id}-default`} value={`noreply@${domain.domain}`}>
-                                    📧 noreply@{domain.domain}
-                                  </SelectItem>
+                        </SelectContent>
+                      </Select>
                                 )}
                               </div>
-                            );
-                          })}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="fromEmail">From Email Address *</Label>
+                    {!selectedDomain ? (
+                      <p className="text-sm text-gray-500">
+                        Please select a domain first
+                      </p>
+                    ) : (
+                      <>
+                        <Select
+                          value={fromDomain}
+                          onValueChange={(value) => {
+                            setFromDomain(value);
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select email address" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {renderEmailOptions()}
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-gray-500">
@@ -924,6 +948,7 @@ export default function CampaignsPage() {
                       </p>
                     </>
                   )}
+                </div>
                 </div>
               )}
 
@@ -980,16 +1005,16 @@ export default function CampaignsPage() {
         </div>
       </div>
 
-      {domains.length === 0 && (
+      {domains.length === 0 && sendingMethod === "aws" && (
         <Card className="mb-6 border-yellow-200 bg-yellow-50">
           <CardContent className="pt-6">
             <p className="text-yellow-800">
               <strong>Note:</strong> You need to verify at least one domain before
-              creating campaigns. Visit the{" "}
+              creating campaigns with AWS SES. Visit the{" "}
               <a href="/dashboard/domains" className="underline font-semibold">
                 Domains page
               </a>{" "}
-              to get started.
+              to get started, or switch to Gmail for easier setup.
             </p>
           </CardContent>
         </Card>
@@ -1005,7 +1030,7 @@ export default function CampaignsPage() {
             <p className="text-gray-600 text-center mb-6">
               Create your first email campaign to get started
             </p>
-            <Button onClick={() => setDialogOpen(true)} disabled={domains.length === 0}>
+            <Button onClick={() => setDialogOpen(true)} disabled={domains.length === 0 && !gmailConnected}>
               <Plus className="mr-2 h-4 w-4" />
               Create Your First Campaign
             </Button>
@@ -1026,8 +1051,8 @@ export default function CampaignsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {campaigns.map((campaign) => (
-                <TableRow key={campaign.id} className="hover:bg-gray-50">
+              {campaigns.map((campaign, index) => (
+                <TableRow key={campaign.id || `campaign-${index}`} className="hover:bg-gray-50">
                   <TableCell className="max-w-md">
                     <div className="space-y-1">
                       <p className="font-semibold text-gray-900">{campaign.subject}</p>
@@ -1235,6 +1260,17 @@ export default function CampaignsPage() {
               </div>
             </div>
           </div>
+
+          {/* Warning Message */}
+          {selectedCampaign && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-sm text-yellow-800">
+                <strong>⚠️ Note:</strong> Emails will be sent immediately to all {recipientCount} recipients. 
+                This action cannot be undone. Recipients won't be added to your subscriber list.
+              </p>
+            </div>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setSendMethodDialogOpen(false)}>
               Cancel
@@ -1513,15 +1549,15 @@ export default function CampaignsPage() {
                         </SelectTrigger>
                         <SelectContent>
                           {domains.map((domain) => {
-                            const emailAddresses = domain.emailAddresses || [];
+                            const emails = domain.emails || [];
                             return (
                               <div key={domain.id}>
-                                {emailAddresses.length > 0 ? (
+                                {emails.length > 0 ? (
                                   <>
                                     <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 border-b">
                                       {domain.domain}
                                     </div>
-                                    {emailAddresses.map((email) => (
+                                    {emails.map((email) => (
                                       <SelectItem key={email} value={email}>
                                         📧 {email}
                                       </SelectItem>
@@ -1647,9 +1683,9 @@ export default function CampaignsPage() {
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Progress</span>
                 <span className="font-medium">
-                  {sendProgress.sent} / {sendProgress.total} sent
-                  {sendProgress.failed > 0 && (
-                    <span className="text-red-600 ml-2">({sendProgress.failed} failed)</span>
+                  {sendProgress.sent || 0} / {sendProgress.total || 0} sent
+                  {(sendProgress.failed || 0) > 0 && (
+                    <span className="text-red-600 ml-2">({sendProgress.failed || 0} failed)</span>
                   )}
                 </span>
               </div>
@@ -1657,19 +1693,19 @@ export default function CampaignsPage() {
                 <div
                   className="bg-blue-600 h-3 rounded-full transition-all duration-300 ease-out"
                   style={{
-                    width: `${sendProgress.total > 0 ? ((sendProgress.sent + sendProgress.failed) / sendProgress.total) * 100 : 0}%`,
+                    width: `${(sendProgress.total || 0) > 0 ? (((sendProgress.sent || 0) + (sendProgress.failed || 0)) / (sendProgress.total || 0)) * 100 : 0}%`,
                   }}
                 />
               </div>
               <div className="flex justify-between text-xs text-gray-500">
                 <span>
-                  {sendProgress.total > 0
-                    ? Math.round(((sendProgress.sent + sendProgress.failed) / sendProgress.total) * 100)
+                  {(sendProgress.total || 0) > 0
+                    ? Math.round((((sendProgress.sent || 0) + (sendProgress.failed || 0)) / (sendProgress.total || 0)) * 100)
                     : 0}
                   % Complete
                 </span>
                 <span>
-                  {sendProgress.total - sendProgress.sent - sendProgress.failed} remaining
+                  {Math.max(0, (sendProgress.total || 0) - (sendProgress.sent || 0) - (sendProgress.failed || 0))} remaining
                 </span>
               </div>
             </div>
@@ -1709,16 +1745,16 @@ export default function CampaignsPage() {
             {/* Summary Stats */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-green-700">{sendProgress.sent}</p>
+                <p className="text-2xl font-bold text-green-700">{sendProgress.sent || 0}</p>
                 <p className="text-xs text-green-600">Sent Successfully</p>
               </div>
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-red-700">{sendProgress.failed}</p>
+                <p className="text-2xl font-bold text-red-700">{sendProgress.failed || 0}</p>
                 <p className="text-xs text-red-600">Failed</p>
               </div>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
                 <p className="text-2xl font-bold text-blue-700">
-                  {sendProgress.total - sendProgress.sent - sendProgress.failed}
+                  {Math.max(0, (sendProgress.total || 0) - (sendProgress.sent || 0) - (sendProgress.failed || 0))}
                 </p>
                 <p className="text-xs text-blue-600">Remaining</p>
               </div>
@@ -1848,6 +1884,7 @@ export default function CampaignsPage() {
               <div className="flex items-center gap-3 pt-4 border-t">
                 <Label className="text-sm font-semibold text-gray-600">Quick Actions:</Label>
                 {selectedCampaignDetails.status === "sent" && (
+                  <>
                   <Button
                     size="sm"
                     variant="outline"
@@ -1859,6 +1896,16 @@ export default function CampaignsPage() {
                     <Users className="mr-2 h-4 w-4" />
                     View Recipients
                   </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleSimulateTracking(selectedCampaignDetails)}
+                      className="text-blue-600 hover:text-blue-700"
+                    >
+                      <Eye className="mr-2 h-4 w-4" />
+                      Simulate Tracking
+                    </Button>
+                  </>
                 )}
                 {selectedCampaignDetails.status === "draft" && (
                   <Button

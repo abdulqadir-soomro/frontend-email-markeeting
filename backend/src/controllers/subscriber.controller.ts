@@ -34,7 +34,10 @@ export class SubscriberController {
 
     res.status(201).json({
       success: true,
-      data: subscriber,
+      data: {
+        ...subscriber.toObject(),
+        id: (subscriber._id as any).toString(),
+      },
     });
   });
 
@@ -59,9 +62,15 @@ export class SubscriberController {
 
     const total = await Subscriber.countDocuments(query);
 
+    // Transform _id to id for frontend compatibility
+    const transformedSubscribers = subscribers.map(subscriber => ({
+      ...subscriber.toObject(),
+      id: (subscriber._id as any).toString(),
+    }));
+
     res.json({
       success: true,
-      data: subscribers,
+      data: transformedSubscribers,
       pagination: {
         page: Number(page),
         limit: Number(limit),
@@ -87,7 +96,10 @@ export class SubscriberController {
 
     res.json({
       success: true,
-      data: subscriber,
+      data: {
+        ...subscriber.toObject(),
+        id: (subscriber._id as any).toString(),
+      },
     });
   });
 
@@ -126,7 +138,10 @@ export class SubscriberController {
 
     res.json({
       success: true,
-      data: subscriber,
+      data: {
+        ...subscriber.toObject(),
+        id: (subscriber._id as any).toString(),
+      },
     });
   });
 
