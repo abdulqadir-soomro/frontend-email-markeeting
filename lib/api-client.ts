@@ -30,18 +30,26 @@ async function apiFetch(endpoint: string, options: RequestInit = {}) {
     (headers as any)['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
 
-  const data = await response.json();
+    const data = await response.json();
 
-  if (!response.ok) {
-    throw new Error(data.error || 'An error occurred');
+    if (!response.ok) {
+      throw new Error(data.error || 'An error occurred');
+    }
+
+    return data;
+  } catch (error) {
+    // Handle network errors gracefully
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to server. Please check if the backend is running.');
+    }
+    throw error;
   }
-
-  return data;
 }
 
 // Auth API

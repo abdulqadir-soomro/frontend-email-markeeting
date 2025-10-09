@@ -52,13 +52,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             localStorage.removeItem('token');
           }
         } catch (error) {
+          console.warn('Auth check failed, removing token:', error);
           localStorage.removeItem('token');
         }
       }
       setLoading(false);
     };
 
-    checkAuth();
+    // Add a small delay to prevent immediate API calls during app initialization
+    const timer = setTimeout(checkAuth, 100);
+    return () => clearTimeout(timer);
   }, []);
 
   const login = async (email: string, password: string) => {
