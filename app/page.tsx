@@ -133,7 +133,7 @@ export default function HomePage() {
               </div>
               <CardTitle>Secure & Reliable</CardTitle>
               <CardDescription>
-                Built on Firebase and AWS infrastructure for enterprise-grade
+                Built on AWS infrastructure for enterprise-grade
                 security
               </CardDescription>
             </CardHeader>
@@ -213,7 +213,7 @@ export default function HomePage() {
           </div>
           <p>© 2025 EmailPro. All rights reserved.</p>
           <p className="mt-2 text-sm">
-            Powered by Next.js, Firebase, and AWS SES
+            Powered by Next.js and AWS SES
           </p>
         </div>
       </footer>
