@@ -1,5 +1,5 @@
 // API Client for Backend Communication
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_URL = (process as any).env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 // Get auth token from localStorage
 const getToken = (): string | null => {
