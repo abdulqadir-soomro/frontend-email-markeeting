@@ -35,13 +35,10 @@ export const useRealtimeTracking = (campaignId: string | null) => {
 
     // Create new EventSource connection
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-    // Remove /api from baseUrl if it exists, then add the correct path
-    const apiUrl = baseUrl.replace('/api', '');
-    const trackingUrl = `${apiUrl}/api/track/realtime/${campaignId}`;
+    const trackingUrl = `${baseUrl}/track/realtime/${campaignId}`;
     
     console.log('🔗 Connecting to real-time tracking:', trackingUrl);
     console.log('🔗 Base URL:', baseUrl);
-    console.log('🔗 API URL:', apiUrl);
     
     let eventSource: EventSource;
     try {
@@ -65,7 +62,18 @@ export const useRealtimeTracking = (campaignId: string | null) => {
         const data = JSON.parse(event.data);
         console.log('📊 Raw tracking data received:', data);
         
-        // Skip non-data messages (like connection messages)
+        // Handle different message types
+        if (data.type === 'heartbeat') {
+          console.log('💓 Heartbeat received');
+          return;
+        }
+        
+        if (data.type === 'connection') {
+          console.log('🔗 Connection message:', data.message);
+          return;
+        }
+        
+        // Skip other non-data messages
         if (data.type && data.type !== 'data') {
           console.log('📊 Skipping non-data message:', data.type);
           return;
@@ -109,41 +117,44 @@ export const useRealtimeTracking = (campaignId: string | null) => {
       console.error('Real-time tracking error:', event);
       console.error('EventSource readyState:', eventSource.readyState);
       console.error('EventSource URL:', eventSource.url);
-      console.error('EventSource withCredentials:', eventSource.withCredentials);
       
       setIsConnected(false);
       
-      // Determine specific error message
+      // Determine specific error message based on readyState
       let errorMessage = 'Connection lost. Retrying...';
       if (eventSource.readyState === EventSource.CLOSED) {
         errorMessage = 'Connection closed. Retrying...';
       } else if (eventSource.readyState === EventSource.CONNECTING) {
-        errorMessage = 'Connecting...';
-      }
-      
-      // Check if it's a network error
-      if (eventSource.readyState === EventSource.CONNECTING) {
         errorMessage = 'Failed to connect to tracking server. Check if backend is running.';
       }
       
       setError(errorMessage);
       
-      // Retry connection after 5 seconds
+      // Close the current connection
+      eventSource.close();
+      eventSourceRef.current = null;
+      
+      // Retry connection after 3 seconds (reduced from 5)
       setTimeout(() => {
-        if (campaignId) {
-          eventSource.close();
+        if (campaignId && !eventSourceRef.current) {
+          console.log('🔄 Retrying real-time tracking connection...');
           // Trigger reconnection by updating campaignId
           setTrackingData(null);
+          setError(null);
         }
-      }, 5000);
+      }, 3000);
     };
 
     return () => {
-      eventSource.close();
-      eventSourceRef.current = null;
+      console.log('🧹 Cleaning up real-time tracking connection');
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
       setIsConnected(false);
       if (fallbackIntervalRef.current) {
         clearInterval(fallbackIntervalRef.current);
+        fallbackIntervalRef.current = null;
       }
     };
   }, [campaignId]);
@@ -154,7 +165,6 @@ export const useRealtimeTracking = (campaignId: string | null) => {
     
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-      const apiUrl = baseUrl.replace('/api', '');
       
       // Get auth token from localStorage
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -167,7 +177,7 @@ export const useRealtimeTracking = (campaignId: string | null) => {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      const response = await fetch(`${apiUrl}/api/campaigns/${campaignId}/analytics`, {
+      const response = await fetch(`${baseUrl}/campaigns/${campaignId}/analytics`, {
         method: 'GET',
         headers,
       });

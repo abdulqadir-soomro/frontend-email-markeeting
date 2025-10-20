@@ -618,12 +618,12 @@ export default function CampaignsPage() {
         // Simulate tracking for each recipient
         for (const recipient of recipients) {
           try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/track/test?campaignId=${campaign.id}&email=${encodeURIComponent(recipient.recipientEmail)}`);
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/track/test?campaignId=${campaign.id}&email=${encodeURIComponent(recipient.email)}`);
             if (!response.ok) {
-              console.error(`Failed to simulate tracking for ${recipient.recipientEmail}:`, response.statusText);
+              console.error(`Failed to simulate tracking for ${recipient.email}:`, response.statusText);
             }
           } catch (error) {
-            console.error(`Failed to simulate tracking for ${recipient.recipientEmail}:`, error);
+            console.error(`Failed to simulate tracking for ${recipient.email}:`, error);
           }
         }
 
