@@ -182,6 +182,7 @@ export const useRealtimeTracking = (campaignId: string | null) => {
       if (data.success && data.data) {
         const analytics = data.data.analytics;
         setTrackingData({
+          type: 'data', // ✅ Added this
           campaignId,
           timestamp: new Date().toISOString(),
           analytics: {
