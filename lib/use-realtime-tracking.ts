@@ -134,7 +134,14 @@ export const useRealtimeTracking = (campaignId: string | null) => {
       eventSource.close();
       eventSourceRef.current = null;
       
-      // Retry connection after 3 seconds (reduced from 5)
+      // Set up fallback polling immediately when connection fails
+      if (!fallbackIntervalRef.current) {
+        console.log('🔄 Setting up fallback polling due to connection error...');
+        fetchTrackingData(); // Fetch immediately
+        fallbackIntervalRef.current = setInterval(fetchTrackingData, 5000); // Poll every 5 seconds
+      }
+      
+      // Retry connection after 5 seconds (longer delay to avoid rapid reconnects)
       setTimeout(() => {
         if (campaignId && !eventSourceRef.current) {
           console.log('🔄 Retrying real-time tracking connection...');
@@ -142,7 +149,7 @@ export const useRealtimeTracking = (campaignId: string | null) => {
           setTrackingData(null);
           setError(null);
         }
-      }, 3000);
+      }, 5000);
     };
 
     return () => {
