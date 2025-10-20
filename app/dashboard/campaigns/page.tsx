@@ -38,8 +38,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/use-toast";
-import { Plus, Mail, Send, Trash2, Eye, Settings, Globe, Users, Download, FileDown, Upload, RefreshCw, CheckCircle, X, Clock } from "lucide-react";
+import { Plus, Mail, Send, Trash2, Eye, Settings, Globe, Users, Download, FileDown, Upload, RefreshCw, CheckCircle, X, Clock, Wifi, WifiOff } from "lucide-react";
 import { campaignAPI, domainAPI, templateAPI, subscriberAPI, gmailAPI } from "@/lib/api-client";
+import { useRealtimeTracking } from "@/lib/use-realtime-tracking";
 
 interface Campaign {
   id: string;
@@ -134,6 +135,43 @@ export default function CampaignsPage() {
     clickRate: number;
   } | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
+
+  // Real-time tracking
+  const { trackingData, isConnected, error: trackingError } = useRealtimeTracking(
+    detailsDialogOpen && selectedCampaignDetails ? selectedCampaignDetails.id : null
+  );
+
+  // State to store real-time data for all campaigns
+  const [campaignsRealTimeData, setCampaignsRealTimeData] = useState<{[key: string]: any}>({});
+
+  // Helper function to get real-time or fallback data
+  const getRealTimeData = (campaignId: string, field: string, fallback: number = 0) => {
+    return campaignsRealTimeData[campaignId]?.[field] ?? fallback;
+  };
+
+  // Update campaign stats when real-time data is available
+  useEffect(() => {
+    if (trackingData && selectedCampaignDetails) {
+      const analytics = trackingData.analytics;
+      setCampaignStats({
+        totalSent: analytics.totalSent,
+        opened: analytics.totalOpened,
+        clicked: analytics.totalClicked,
+        openRate: parseFloat(analytics.openRate),
+        clickRate: parseFloat(analytics.clickRate),
+      });
+
+      // Also update the campaigns list with real-time data
+      setCampaignsRealTimeData(prev => ({
+        ...prev,
+        [selectedCampaignDetails.id]: {
+          openCount: analytics.totalOpened,
+          clickCount: analytics.totalClicked,
+          sentCount: analytics.totalSent,
+        }
+      }));
+    }
+  }, [trackingData, selectedCampaignDetails]);
 
   useEffect(() => {
     fetchCampaigns();
@@ -580,7 +618,10 @@ export default function CampaignsPage() {
         // Simulate tracking for each recipient
         for (const recipient of recipients) {
           try {
-            await fetch(`http://localhost:5000/api/track/test?campaignId=${campaign.id}&email=${encodeURIComponent(recipient.recipientEmail)}`);
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/track/test?campaignId=${campaign.id}&email=${encodeURIComponent(recipient.recipientEmail)}`);
+            if (!response.ok) {
+              console.error(`Failed to simulate tracking for ${recipient.recipientEmail}:`, response.statusText);
+            }
           } catch (error) {
             console.error(`Failed to simulate tracking for ${recipient.recipientEmail}:`, error);
           }
@@ -738,6 +779,12 @@ export default function CampaignsPage() {
           <p className="text-gray-600 mt-2">
             Create and manage your email campaigns
           </p>
+          {Object.keys(campaignsRealTimeData).length > 0 && (
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-xs text-green-600 font-medium">Live data</span>
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setQuickSendDialogOpen(true)}>
@@ -1110,11 +1157,16 @@ export default function CampaignsPage() {
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <Eye className="h-4 w-4 text-blue-500" />
-                        <span className="font-medium">{campaign.openCount || 0}</span>
+                        <span className="font-medium">
+                          {getRealTimeData(campaign.id, 'openCount', campaign.openCount)}
+                        </span>
+                        {campaignsRealTimeData[campaign.id] && (
+                          <span className="text-xs text-green-600">●</span>
+                        )}
                       </div>
-                      {campaign.sentCount > 0 && (
+                      {getRealTimeData(campaign.id, 'sentCount', campaign.sentCount) > 0 && (
                         <p className="text-xs text-gray-500">
-                          {((campaign.openCount || 0) / campaign.sentCount * 100).toFixed(1)}%
+                          {(getRealTimeData(campaign.id, 'openCount', campaign.openCount) / getRealTimeData(campaign.id, 'sentCount', campaign.sentCount) * 100).toFixed(1)}%
                         </p>
                       )}
                     </div>
@@ -1122,11 +1174,16 @@ export default function CampaignsPage() {
                   <TableCell>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{campaign.clickCount || 0}</span>
+                        <span className="font-medium">
+                          {getRealTimeData(campaign.id, 'clickCount', campaign.clickCount)}
+                        </span>
+                        {campaignsRealTimeData[campaign.id] && (
+                          <span className="text-xs text-green-600">●</span>
+                        )}
                       </div>
-                      {campaign.sentCount > 0 && (
+                      {getRealTimeData(campaign.id, 'sentCount', campaign.sentCount) > 0 && (
                         <p className="text-xs text-gray-500">
-                          {((campaign.clickCount || 0) / campaign.sentCount * 100).toFixed(1)}%
+                          {(getRealTimeData(campaign.id, 'clickCount', campaign.clickCount) / getRealTimeData(campaign.id, 'sentCount', campaign.sentCount) * 100).toFixed(1)}%
                         </p>
                       )}
                     </div>
@@ -1813,30 +1870,50 @@ export default function CampaignsPage() {
 
                 {/* Statistics */}
                 <div className="space-y-3">
-                  <Label className="text-sm font-semibold text-gray-600">Campaign Statistics</Label>
-                  {loadingStats ? (
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-semibold text-gray-600">Campaign Statistics</Label>
+                    <div className="flex items-center gap-2">
+                      {isConnected ? (
+                        <div className="flex items-center gap-1 text-green-600">
+                          <Wifi className="h-4 w-4" />
+                          <span className="text-xs">Live</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-red-600">
+                          <WifiOff className="h-4 w-4" />
+                          <span className="text-xs">Offline</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {loadingStats && !trackingData ? (
                     <div className="flex items-center justify-center py-8">
                       <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
                     </div>
-                  ) : campaignStats ? (
+                  ) : (trackingData || campaignStats) ? (
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <p className="text-3xl font-bold text-blue-700">{campaignStats.totalSent}</p>
+                        <p className="text-3xl font-bold text-blue-700">
+                          {trackingData?.analytics?.totalSent || campaignStats?.totalSent || 0}
+                        </p>
                         <p className="text-xs text-blue-600 mt-1">Total Sent</p>
                       </div>
                       <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                        <p className="text-3xl font-bold text-green-700">{campaignStats.opened}</p>
+                        <p className="text-3xl font-bold text-green-700">
+                          {trackingData?.analytics?.totalOpened || campaignStats?.opened || 0}
+                        </p>
                         <p className="text-xs text-green-600 mt-1">Opened</p>
                       </div>
                       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                         <p className="text-3xl font-bold text-purple-700">
-                          {campaignStats.openRate.toFixed(1)}%
+                          {trackingData?.analytics?.openRate || campaignStats?.openRate?.toFixed(1) || '0.0'}%
                         </p>
                         <p className="text-xs text-purple-600 mt-1">Open Rate</p>
                       </div>
                       <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                         <p className="text-3xl font-bold text-orange-700">
-                          {campaignStats.clickRate.toFixed(1)}%
+                          {trackingData?.analytics?.clickRate || campaignStats?.clickRate?.toFixed(1) || '0.0'}%
                         </p>
                         <p className="text-xs text-orange-600 mt-1">Click Rate</p>
                       </div>
@@ -1848,6 +1925,12 @@ export default function CampaignsPage() {
                           ? "Statistics will be available after sending"
                           : "No statistics available"}
                       </p>
+                    </div>
+                  )}
+                  
+                  {trackingError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-xs text-red-600">{trackingError}</p>
                     </div>
                   )}
                 </div>
