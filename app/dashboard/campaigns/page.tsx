@@ -38,7 +38,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/use-toast";
-import { Plus, Mail, Send, Trash2, Eye, Settings, Globe, Users, Download, FileDown, Upload, RefreshCw, CheckCircle, X, Clock, Wifi, WifiOff, BarChart3 } from "lucide-react";
+import { Plus, Mail, Send, Trash2, Eye, Settings, Globe, Users, Download, FileDown, Upload, RefreshCw, CheckCircle, X, Clock, Wifi, WifiOff, BarChart3, Activity, Zap, MousePointer } from "lucide-react";
 import { campaignAPI, domainAPI, templateAPI, subscriberAPI, gmailAPI, trackingAPI } from "@/lib/api-client";
 import { useRealtimeTracking } from "@/lib/use-realtime-tracking";
 import EmailTrackingData from "@/components/dashboard/EmailTrackingData";
@@ -141,10 +141,16 @@ export default function CampaignsPage() {
   const [trackingDialogOpen, setTrackingDialogOpen] = useState(false);
   const [selectedCampaignForTracking, setSelectedCampaignForTracking] = useState<Campaign | null>(null);
 
-  // Real-time tracking
+  // Real-time tracking for campaign details dialog
   const { trackingData, isConnected, error: trackingError } = useRealtimeTracking(
     detailsDialogOpen && selectedCampaignDetails ? selectedCampaignDetails.id : null
   );
+
+  // Global real-time tracking for all campaigns (enhanced)
+  const [globalTrackingEnabled, setGlobalTrackingEnabled] = useState(true);
+  const [globalTrackingData, setGlobalTrackingData] = useState<{[key: string]: any}>({});
+  const [globalTrackingConnected, setGlobalTrackingConnected] = useState(false);
+  const [globalTrackingError, setGlobalTrackingError] = useState<string | null>(null);
 
   // State to store real-time data for all campaigns
   const [campaignsRealTimeData, setCampaignsRealTimeData] = useState<{[key: string]: any}>({});
@@ -177,6 +183,82 @@ export default function CampaignsPage() {
       }));
     }
   }, [trackingData, selectedCampaignDetails]);
+
+  // Enhanced global tracking effect for all campaigns
+  useEffect(() => {
+    if (!globalTrackingEnabled || campaigns.length === 0) return;
+
+    console.log('🌐 Setting up global tracking for', campaigns.length, 'campaigns');
+
+    // Create EventSource connections for all sent campaigns
+    const sentCampaigns = campaigns.filter(c => c.status === 'sent');
+    const eventSources: EventSource[] = [];
+
+    sentCampaigns.forEach(campaign => {
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+        const trackingUrl = `${baseUrl}/track/realtime/${campaign.id}`;
+        
+        console.log(`🔗 Global tracking for campaign ${campaign.id}:`, trackingUrl);
+        
+        const eventSource = new EventSource(trackingUrl);
+        eventSources.push(eventSource);
+
+        eventSource.onopen = () => {
+          console.log(`🔗 Global tracking connected for campaign ${campaign.id}`);
+          setGlobalTrackingConnected(true);
+          setGlobalTrackingError(null);
+        };
+
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'data' && data.analytics) {
+              console.log(`📊 Global tracking update for ${campaign.id}:`, data.analytics);
+              
+              setGlobalTrackingData(prev => ({
+                ...prev,
+                [campaign.id]: {
+                  ...data.analytics,
+                  lastUpdated: new Date().toISOString(),
+                }
+              }));
+
+              // Update campaigns list with real-time data
+              setCampaignsRealTimeData(prev => ({
+                ...prev,
+                [campaign.id]: {
+                  openCount: data.analytics.totalOpened,
+                  clickCount: data.analytics.totalClicked,
+                  sentCount: data.analytics.totalSent,
+                }
+              }));
+            }
+          } catch (error) {
+            console.error(`❌ Error parsing global tracking data for ${campaign.id}:`, error);
+          }
+        };
+
+        eventSource.onerror = (event) => {
+          console.error(`❌ Global tracking error for campaign ${campaign.id}:`, event);
+          setGlobalTrackingError(`Connection error for campaign ${campaign.id}`);
+        };
+
+      } catch (error) {
+        console.error(`❌ Failed to create global tracking for campaign ${campaign.id}:`, error);
+      }
+    });
+
+    // Cleanup function
+    return () => {
+      console.log('🧹 Cleaning up global tracking connections');
+      eventSources.forEach(eventSource => {
+        eventSource.close();
+      });
+      setGlobalTrackingConnected(false);
+    };
+  }, [campaigns, globalTrackingEnabled]);
 
   useEffect(() => {
     fetchCampaigns();
@@ -797,6 +879,45 @@ export default function CampaignsPage() {
           )}
         </div>
         <div className="flex gap-2">
+          {/* Global Tracking Controls */}
+          <div className="flex items-center gap-2 mr-4">
+            <Button
+              variant={globalTrackingEnabled ? "default" : "outline"}
+              size="sm"
+              onClick={() => setGlobalTrackingEnabled(!globalTrackingEnabled)}
+              className="flex items-center gap-2"
+            >
+              {globalTrackingEnabled ? (
+                <>
+                  <Activity className="h-4 w-4" />
+                  <span>Live Tracking</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4" />
+                  <span>Enable Tracking</span>
+                </>
+              )}
+            </Button>
+            
+            {/* Connection Status Indicator */}
+            {globalTrackingEnabled && (
+              <div className="flex items-center gap-1">
+                {globalTrackingConnected ? (
+                  <>
+                    <Wifi className="h-4 w-4 text-green-500" />
+                    <span className="text-xs text-green-600 font-medium">Connected</span>
+                  </>
+                ) : (
+                  <>
+                    <WifiOff className="h-4 w-4 text-red-500" />
+                    <span className="text-xs text-red-600 font-medium">Disconnected</span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
           <Button variant="outline" onClick={() => setQuickSendDialogOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />
             Quick Send CSV
@@ -1170,8 +1291,11 @@ export default function CampaignsPage() {
                         <span className="font-medium">
                           {getRealTimeData(campaign.id, 'openCount', campaign.openCount)}
                         </span>
-                        {campaignsRealTimeData[campaign.id] && (
-                          <span className="text-xs text-green-600">●</span>
+                        {globalTrackingData[campaign.id] && (
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <span className="text-xs text-green-600 font-medium">Live</span>
+                          </div>
                         )}
                       </div>
                       {getRealTimeData(campaign.id, 'sentCount', campaign.sentCount) > 0 && (
@@ -1184,11 +1308,15 @@ export default function CampaignsPage() {
                   <TableCell>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
+                        <MousePointer className="h-4 w-4 text-purple-500" />
                         <span className="font-medium">
                           {getRealTimeData(campaign.id, 'clickCount', campaign.clickCount)}
                         </span>
-                        {campaignsRealTimeData[campaign.id] && (
-                          <span className="text-xs text-green-600">●</span>
+                        {globalTrackingData[campaign.id] && (
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <span className="text-xs text-green-600 font-medium">Live</span>
+                          </div>
                         )}
                       </div>
                       {getRealTimeData(campaign.id, 'sentCount', campaign.sentCount) > 0 && (
