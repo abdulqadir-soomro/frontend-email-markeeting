@@ -239,6 +239,18 @@ export const gmailAPI = {
 
   test: () => apiFetch('/gmail/test'),
 };
+// Tracking API
+export const trackingAPI = {
+  getEmailTrackingData: (campaignId: string, params?: any) => {
+    const query = new URLSearchParams(params).toString();
+    return apiFetch(`/track/data/${campaignId}?${query}`);
+  },
+  
+  getTrackingOverview: (params?: any) => {
+    const query = new URLSearchParams(params).toString();
+    return apiFetch(`/track/tracking-overview?${query}`);
+  },
+};
 
 // Admin API
 export const adminAPI = {

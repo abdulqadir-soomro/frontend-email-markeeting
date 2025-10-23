@@ -38,9 +38,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/use-toast";
-import { Plus, Mail, Send, Trash2, Eye, Settings, Globe, Users, Download, FileDown, Upload, RefreshCw, CheckCircle, X, Clock, Wifi, WifiOff } from "lucide-react";
-import { campaignAPI, domainAPI, templateAPI, subscriberAPI, gmailAPI } from "@/lib/api-client";
+import { Plus, Mail, Send, Trash2, Eye, Settings, Globe, Users, Download, FileDown, Upload, RefreshCw, CheckCircle, X, Clock, Wifi, WifiOff, BarChart3 } from "lucide-react";
+import { campaignAPI, domainAPI, templateAPI, subscriberAPI, gmailAPI, trackingAPI } from "@/lib/api-client";
 import { useRealtimeTracking } from "@/lib/use-realtime-tracking";
+import EmailTrackingData from "@/components/dashboard/EmailTrackingData";
 
 interface Campaign {
   id: string;
@@ -135,6 +136,10 @@ export default function CampaignsPage() {
     clickRate: number;
   } | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
+
+  // Detailed Tracking State
+  const [trackingDialogOpen, setTrackingDialogOpen] = useState(false);
+  const [selectedCampaignForTracking, setSelectedCampaignForTracking] = useState<Campaign | null>(null);
 
   // Real-time tracking
   const { trackingData, isConnected, error: trackingError } = useRealtimeTracking(
@@ -645,6 +650,11 @@ export default function CampaignsPage() {
         variant: "destructive",
       });
     }
+  };
+
+  const handleViewDetailedTracking = (campaign: Campaign) => {
+    setSelectedCampaignForTracking(campaign);
+    setTrackingDialogOpen(true);
   };
 
   const handleQuickSend = async () => {
@@ -1199,14 +1209,25 @@ export default function CampaignsPage() {
                         <Eye className="h-4 w-4" />
                       </Button>
                       {campaign.status === "sent" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleViewRecipients(campaign)}
-                          title="View recipients"
-                        >
-                          <Users className="h-4 w-4" />
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleViewRecipients(campaign)}
+                            title="View recipients"
+                          >
+                            <Users className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleViewDetailedTracking(campaign)}
+                            title="View detailed tracking data"
+                            className="text-blue-600 hover:text-blue-700"
+                          >
+                            <BarChart3 className="h-4 w-4" />
+                          </Button>
+                        </>
                       )}
                       {campaign.status === "draft" && (
                         <Button
@@ -1979,11 +2000,23 @@ export default function CampaignsPage() {
                     <Users className="mr-2 h-4 w-4" />
                     View Recipients
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setDetailsDialogOpen(false);
+                      handleViewDetailedTracking(selectedCampaignDetails);
+                    }}
+                    className="text-blue-600 hover:text-blue-700"
+                  >
+                    <BarChart3 className="mr-2 h-4 w-4" />
+                    Detailed Tracking
+                  </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => handleSimulateTracking(selectedCampaignDetails)}
-                      className="text-blue-600 hover:text-blue-700"
+                      className="text-green-600 hover:text-green-700"
                     >
                       <Eye className="mr-2 h-4 w-4" />
                       Simulate Tracking
@@ -2020,6 +2053,34 @@ export default function CampaignsPage() {
 
           <DialogFooter>
             <Button onClick={() => setDetailsDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detailed Email Tracking Dialog */}
+      <Dialog open={trackingDialogOpen} onOpenChange={setTrackingDialogOpen}>
+        <DialogContent className="max-w-7xl max-h-[95vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <BarChart3 className="h-6 w-6 text-blue-600" />
+              Detailed Email Tracking
+            </DialogTitle>
+            <DialogDescription>
+              Comprehensive tracking data for "{selectedCampaignForTracking?.subject}"
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="overflow-y-auto max-h-[80vh]">
+            {selectedCampaignForTracking && (
+              <EmailTrackingData 
+                campaignId={selectedCampaignForTracking.id}
+                campaignSubject={selectedCampaignForTracking.subject}
+              />
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setTrackingDialogOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

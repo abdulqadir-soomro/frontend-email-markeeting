@@ -23,10 +23,14 @@ export const useRealtimeTracking = (campaignId: string | null) => {
 
   useEffect(() => {
     if (!campaignId) {
+      console.log('🔍 No campaignId provided, skipping real-time tracking');
       setTrackingData(null);
       setIsConnected(false);
+      setError(null);
       return;
     }
+
+    console.log('🔍 Setting up real-time tracking for campaign:', campaignId);
 
     // Close existing connection
     if (eventSourceRef.current) {
@@ -117,6 +121,8 @@ export const useRealtimeTracking = (campaignId: string | null) => {
       console.error('Real-time tracking error:', event);
       console.error('EventSource readyState:', eventSource.readyState);
       console.error('EventSource URL:', eventSource.url);
+      console.error('Campaign ID:', campaignId);
+      console.error('Base URL:', baseUrl);
       
       setIsConnected(false);
       
