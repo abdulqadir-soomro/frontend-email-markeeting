@@ -441,138 +441,265 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
             </div>
           </div>
 
-          {/* Records Table */}
-          <div className="border rounded-lg overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Recipient</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Sent At</TableHead>
-                  <TableHead>Opened</TableHead>
-                  <TableHead>Clicked</TableHead>
-                  <TableHead>Bounced</TableHead>
-                  <TableHead>Complained</TableHead>
-                  <TableHead>Time to Open</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {records.length === 0 ? (
+          {/* Desktop Table View */}
+          <div className="hidden lg:block border rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                      No tracking data found
-                    </TableCell>
+                    <TableHead className="w-[200px]">Recipient</TableHead>
+                    <TableHead className="w-[100px]">Status</TableHead>
+                    <TableHead className="w-[120px]">Sent At</TableHead>
+                    <TableHead className="w-[100px]">Opened</TableHead>
+                    <TableHead className="w-[100px]">Clicked</TableHead>
+                    <TableHead className="w-[100px]">Bounced</TableHead>
+                    <TableHead className="w-[100px]">Complained</TableHead>
+                    <TableHead className="w-[120px]">Time to Open</TableHead>
                   </TableRow>
-                ) : (
-                  records.map((record) => (
-                    <TableRow key={record.id} className="hover:bg-gray-50">
-                      <TableCell>
-                        <div className="space-y-1">
-                          <p className="font-medium text-sm">{record.recipientEmail}</p>
-                          <p className="text-xs text-gray-500">{record.subscriberName}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {getStatusBadge(record.status)}
-                      </TableCell>
-                      <TableCell className="text-sm text-gray-600">
-                        {formatDateTime(record.sentAt)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1">
-                            {record.opened ? (
-                              <CheckCircle className="h-4 w-4 text-green-600" />
-                            ) : (
-                              <Clock className="h-4 w-4 text-gray-400" />
-                            )}
-                            <span className="text-sm">
-                              {record.opened ? "Yes" : "No"}
-                            </span>
-                          </div>
-                          {record.opened && (
-                            <div className="text-xs text-gray-500">
-                              {formatDateTime(record.openedAt)}
-                              {record.openCount > 1 && (
-                                <span className="ml-1">({record.openCount}x)</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1">
-                            {record.clicked ? (
-                              <CheckCircle className="h-4 w-4 text-green-600" />
-                            ) : (
-                              <Clock className="h-4 w-4 text-gray-400" />
-                            )}
-                            <span className="text-sm">
-                              {record.clicked ? "Yes" : "No"}
-                            </span>
-                          </div>
-                          {record.clicked && (
-                            <div className="text-xs text-gray-500">
-                              {formatDateTime(record.clickedAt)}
-                              {record.clickCount > 1 && (
-                                <span className="ml-1">({record.clickCount}x)</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1">
-                            {record.bounced ? (
-                              <AlertTriangle className="h-4 w-4 text-red-600" />
-                            ) : (
-                              <CheckCircle className="h-4 w-4 text-green-600" />
-                            )}
-                            <span className="text-sm">
-                              {record.bounced ? "Yes" : "No"}
-                            </span>
-                          </div>
-                          {record.bounced && (
-                            <div className="text-xs text-gray-500">
-                              {formatDateTime(record.bouncedAt)}
-                              {record.bounceReason && (
-                                <div className="text-red-600 mt-1">
-                                  {record.bounceReason}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1">
-                            {record.complained ? (
-                              <AlertTriangle className="h-4 w-4 text-orange-600" />
-                            ) : (
-                              <CheckCircle className="h-4 w-4 text-green-600" />
-                            )}
-                            <span className="text-sm">
-                              {record.complained ? "Yes" : "No"}
-                            </span>
-                          </div>
-                          {record.complained && (
-                            <div className="text-xs text-gray-500">
-                              {formatDateTime(record.complainedAt)}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-gray-600">
-                        {formatTimeToOpen(record.timeToOpen)}
+                </TableHeader>
+                <TableBody>
+                  {records.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                        No tracking data found
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    records.map((record) => (
+                      <TableRow key={record.id} className="hover:bg-gray-50">
+                        <TableCell className="w-[200px]">
+                          <div className="space-y-1">
+                            <p className="font-medium text-sm break-all">{record.recipientEmail}</p>
+                            <p className="text-xs text-gray-500">{record.subscriberName}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="w-[100px]">
+                          {getStatusBadge(record.status)}
+                        </TableCell>
+                        <TableCell className="w-[120px] text-xs text-gray-600">
+                          {formatDateTime(record.sentAt)}
+                        </TableCell>
+                        <TableCell className="w-[100px]">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1">
+                              {record.opened ? (
+                                <CheckCircle className="h-3 w-3 text-green-600" />
+                              ) : (
+                                <Clock className="h-3 w-3 text-gray-400" />
+                              )}
+                              <span className="text-xs">
+                                {record.opened ? "Yes" : "No"}
+                              </span>
+                            </div>
+                            {record.opened && (
+                              <div className="text-xs text-gray-500">
+                                {formatDateTime(record.openedAt)}
+                                {record.openCount > 1 && (
+                                  <span className="ml-1">({record.openCount}x)</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="w-[100px]">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1">
+                              {record.clicked ? (
+                                <CheckCircle className="h-3 w-3 text-green-600" />
+                              ) : (
+                                <Clock className="h-3 w-3 text-gray-400" />
+                              )}
+                              <span className="text-xs">
+                                {record.clicked ? "Yes" : "No"}
+                              </span>
+                            </div>
+                            {record.clicked && (
+                              <div className="text-xs text-gray-500">
+                                {formatDateTime(record.clickedAt)}
+                                {record.clickCount > 1 && (
+                                  <span className="ml-1">({record.clickCount}x)</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="w-[100px]">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1">
+                              {record.bounced ? (
+                                <AlertTriangle className="h-3 w-3 text-red-600" />
+                              ) : (
+                                <CheckCircle className="h-3 w-3 text-green-600" />
+                              )}
+                              <span className="text-xs">
+                                {record.bounced ? "Yes" : "No"}
+                              </span>
+                            </div>
+                            {record.bounced && (
+                              <div className="text-xs text-gray-500">
+                                {formatDateTime(record.bouncedAt)}
+                                {record.bounceReason && (
+                                  <div className="text-red-600 mt-1 text-xs">
+                                    {record.bounceReason}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="w-[100px]">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1">
+                              {record.complained ? (
+                                <AlertTriangle className="h-3 w-3 text-orange-600" />
+                              ) : (
+                                <CheckCircle className="h-3 w-3 text-green-600" />
+                              )}
+                              <span className="text-xs">
+                                {record.complained ? "Yes" : "No"}
+                              </span>
+                            </div>
+                            {record.complained && (
+                              <div className="text-xs text-gray-500">
+                                {formatDateTime(record.complainedAt)}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="w-[120px] text-xs text-gray-600">
+                          {formatTimeToOpen(record.timeToOpen)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="lg:hidden space-y-3">
+            {records.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                No tracking data found
+              </div>
+            ) : (
+              records.map((record) => (
+                <Card key={record.id} className="p-3">
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm break-all text-gray-900">
+                          {record.recipientEmail}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {record.subscriberName}
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0">
+                        {getStatusBadge(record.status)}
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-gray-500">Sent:</span>
+                        <p className="text-gray-900">{formatDateTime(record.sentAt)}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Time to Open:</span>
+                        <p className="text-gray-900">{formatTimeToOpen(record.timeToOpen)}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-gray-500">Opened:</span>
+                        <div className="flex items-center gap-1 mt-1">
+                          {record.opened ? (
+                            <CheckCircle className="h-3 w-3 text-green-600" />
+                          ) : (
+                            <Clock className="h-3 w-3 text-gray-400" />
+                          )}
+                          <span className="text-gray-900">
+                            {record.opened ? "Yes" : "No"}
+                          </span>
+                        </div>
+                        {record.opened && (
+                          <p className="text-gray-500 mt-1">
+                            {formatDateTime(record.openedAt)}
+                            {record.openCount > 1 && (
+                              <span className="ml-1">({record.openCount}x)</span>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Clicked:</span>
+                        <div className="flex items-center gap-1 mt-1">
+                          {record.clicked ? (
+                            <CheckCircle className="h-3 w-3 text-green-600" />
+                          ) : (
+                            <Clock className="h-3 w-3 text-gray-400" />
+                          )}
+                          <span className="text-gray-900">
+                            {record.clicked ? "Yes" : "No"}
+                          </span>
+                        </div>
+                        {record.clicked && (
+                          <p className="text-gray-500 mt-1">
+                            {formatDateTime(record.clickedAt)}
+                            {record.clickCount > 1 && (
+                              <span className="ml-1">({record.clickCount}x)</span>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-gray-500">Bounced:</span>
+                        <div className="flex items-center gap-1 mt-1">
+                          {record.bounced ? (
+                            <AlertTriangle className="h-3 w-3 text-red-600" />
+                          ) : (
+                            <CheckCircle className="h-3 w-3 text-green-600" />
+                          )}
+                          <span className="text-gray-900">
+                            {record.bounced ? "Yes" : "No"}
+                          </span>
+                        </div>
+                        {record.bounced && (
+                          <div className="mt-1">
+                            <p className="text-gray-500">{formatDateTime(record.bouncedAt)}</p>
+                            {record.bounceReason && (
+                              <p className="text-red-600 text-xs mt-1">{record.bounceReason}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Complained:</span>
+                        <div className="flex items-center gap-1 mt-1">
+                          {record.complained ? (
+                            <AlertTriangle className="h-3 w-3 text-orange-600" />
+                          ) : (
+                            <CheckCircle className="h-3 w-3 text-green-600" />
+                          )}
+                          <span className="text-gray-900">
+                            {record.complained ? "Yes" : "No"}
+                          </span>
+                        </div>
+                        {record.complained && (
+                          <p className="text-gray-500 mt-1">{formatDateTime(record.complainedAt)}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))
+            )}
           </div>
 
           {/* Pagination */}

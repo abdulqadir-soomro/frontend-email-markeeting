@@ -72,16 +72,6 @@ interface Template {
   category: string;
 }
 
-interface Recipient {
-  email: string;
-  name: string;
-  status: string;
-  sentAt?: string;
-  openedAt?: string;
-  opened?: boolean;
-  clicked?: boolean;
-  clickedAt?: string;
-}
 
 export default function CampaignsPage() {
   const { user, isAuthenticated } = useAuth();
@@ -109,15 +99,15 @@ export default function CampaignsPage() {
   const [sendingMethod, setSendingMethod] = useState<"gmail" | "aws">("aws");
   const [gmailConnected, setGmailConnected] = useState(false);
   const [gmailEmail, setGmailEmail] = useState("");
-  const [recipientsDialogOpen, setRecipientsDialogOpen] = useState(false);
-  const [selectedCampaignForRecipients, setSelectedCampaignForRecipients] = useState<Campaign | null>(null);
-  const [recipients, setRecipients] = useState<Recipient[]>([]);
-  const [loadingRecipients, setLoadingRecipients] = useState(false);
   const [quickSendDialogOpen, setQuickSendDialogOpen] = useState(false);
   const [csvRecipients, setCsvRecipients] = useState<{ email: string; name: string }[]>([]);
   const [quickSendFile, setQuickSendFile] = useState<File | null>(null);
   const [quickSending, setQuickSending] = useState(false);
   const quickSendFileRef = useRef<HTMLInputElement>(null);
+
+  // Delete confirmation state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null);
 
   // Sending Progress States
   const [sendingProgress, setSendingProgress] = useState(false);
@@ -125,26 +115,11 @@ export default function CampaignsPage() {
   const [sendProgress, setSendProgress] = useState({ sent: 0, total: 0, failed: 0 });
   const [sendingLogs, setSendingLogs] = useState<Array<{ email: string; status: "success" | "failed"; timestamp: string }>>([]);
 
-  // Campaign Details State
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-  const [selectedCampaignDetails, setSelectedCampaignDetails] = useState<Campaign | null>(null);
-  const [campaignStats, setCampaignStats] = useState<{
-    totalSent: number;
-    opened: number;
-    clicked: number;
-    openRate: number;
-    clickRate: number;
-  } | null>(null);
-  const [loadingStats, setLoadingStats] = useState(false);
 
   // Detailed Tracking State
   const [trackingDialogOpen, setTrackingDialogOpen] = useState(false);
   const [selectedCampaignForTracking, setSelectedCampaignForTracking] = useState<Campaign | null>(null);
 
-  // Real-time tracking for campaign details dialog
-  const { trackingData, isConnected, error: trackingError } = useRealtimeTracking(
-    detailsDialogOpen && selectedCampaignDetails ? selectedCampaignDetails.id : null
-  );
 
   // Global real-time tracking for all campaigns (enhanced)
   const [globalTrackingEnabled, setGlobalTrackingEnabled] = useState(true);
@@ -160,29 +135,6 @@ export default function CampaignsPage() {
     return campaignsRealTimeData[campaignId]?.[field] ?? fallback;
   };
 
-  // Update campaign stats when real-time data is available
-  useEffect(() => {
-    if (trackingData && selectedCampaignDetails) {
-      const analytics = trackingData.analytics;
-      setCampaignStats({
-        totalSent: analytics.totalSent,
-        opened: analytics.totalOpened,
-        clicked: analytics.totalClicked,
-        openRate: parseFloat(analytics.openRate),
-        clickRate: parseFloat(analytics.clickRate),
-      });
-
-      // Also update the campaigns list with real-time data
-      setCampaignsRealTimeData(prev => ({
-        ...prev,
-        [selectedCampaignDetails.id]: {
-          openCount: analytics.totalOpened,
-          clickCount: analytics.totalClicked,
-          sentCount: analytics.totalSent,
-        }
-      }));
-    }
-  }, [trackingData, selectedCampaignDetails]);
 
   // Enhanced global tracking effect for all campaigns
   useEffect(() => {
@@ -507,18 +459,16 @@ export default function CampaignsPage() {
 
   const handleDeleteCampaign = async (campaign: Campaign) => {
     if (!user) return;
-    if (!confirm(`Delete campaign "${campaign.subject}"?`)) return;
 
     try {
       const data = await campaignAPI.delete(campaign.id);
 
       if (data.success) {
-      toast({
-        title: "Success",
-        description: "Campaign deleted successfully",
-      });
-
-      fetchCampaigns();
+        toast({
+          title: "Success",
+          description: "Campaign deleted successfully",
+        });
+        fetchCampaigns();
       } else {
         throw new Error(data.error || "Failed to delete campaign");
       }
@@ -531,65 +481,25 @@ export default function CampaignsPage() {
     }
   };
 
-  const handleViewRecipients = async (campaign: Campaign) => {
-    setSelectedCampaignForRecipients(campaign);
-    setRecipientsDialogOpen(true);
-    setLoadingRecipients(true);
+  const handleDeleteClick = (campaign: Campaign) => {
+    setCampaignToDelete(campaign);
+    setDeleteDialogOpen(true);
+  };
 
-    try {
-      const data = await campaignAPI.getRecipients(campaign.id);
-      
-      if (data.success) {
-        setRecipients(data.data || []);
-      } else {
-        throw new Error(data.error || "Failed to fetch recipients");
-      }
-    } catch (error: any) {
-      console.error("Error fetching recipients:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load recipients",
-        variant: "destructive",
-      });
-    } finally {
-      setLoadingRecipients(false);
+  const handleConfirmDelete = async () => {
+    if (campaignToDelete) {
+      await handleDeleteCampaign(campaignToDelete);
+      setDeleteDialogOpen(false);
+      setCampaignToDelete(null);
     }
   };
 
-  const handleExportRecipients = () => {
-    if (!selectedCampaignForRecipients || recipients.length === 0) return;
-
-    // Create CSV content
-    const headers = ["Email", "Name", "Status", "Sent At", "Opened At"];
-    const rows = recipients.map(r => [
-      r.email,
-      r.name,
-      r.status,
-      r.sentAt || "N/A",
-      r.openedAt || "N/A"
-    ]);
-
-    const csvContent = [
-      headers.join(","),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
-    ].join("\n");
-
-    // Create download link
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `campaign-${selectedCampaignForRecipients.id}-recipients.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-
-    toast({
-      title: "Exported!",
-      description: "Recipients list downloaded successfully",
-    });
+  const handleCancelDelete = () => {
+    setDeleteDialogOpen(false);
+    setCampaignToDelete(null);
   };
+
+
 
   const handleQuickSendFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -643,54 +553,6 @@ export default function CampaignsPage() {
     }
   };
 
-  const handleViewCampaignDetails = async (campaign: Campaign) => {
-    setSelectedCampaignDetails(campaign);
-    setDetailsDialogOpen(true);
-    setLoadingStats(true);
-    setCampaignStats(null);
-
-    if (!user?.id) {
-      setLoadingStats(false);
-      return;
-    }
-
-    try {
-      // Fetch campaign analytics
-      const data = await campaignAPI.getAnalytics(campaign.id);
-
-      if (data.success && data.data) {
-        const analytics = data.data.analytics;
-        const totalSent = analytics.totalSent || 0;
-        const opened = analytics.totalOpened || 0;
-        const clicked = analytics.totalClicked || 0;
-        const openRate = totalSent > 0 ? (opened / totalSent) * 100 : 0;
-        const clickRate = totalSent > 0 ? (clicked / totalSent) * 100 : 0;
-
-        console.log(`Analytics: Sent: ${totalSent}, Opened: ${opened}, Clicked: ${clicked}`);
-
-        setCampaignStats({
-          totalSent,
-          opened,
-          clicked,
-          openRate,
-          clickRate,
-        });
-      } else {
-        console.error("Failed to fetch campaign analytics:", data);
-        setCampaignStats({
-          totalSent: 0,
-          opened: 0,
-          clicked: 0,
-          openRate: 0,
-          clickRate: 0,
-        });
-      }
-    } catch (error) {
-      console.error("Error fetching campaign stats:", error);
-    } finally {
-      setLoadingStats(false);
-    }
-  };
 
   const handleSimulateTracking = async (campaign: Campaign) => {
     if (!user?.id) return;
@@ -719,9 +581,9 @@ export default function CampaignsPage() {
           description: `Simulated email opens for ${recipients.length} recipients`,
         });
 
-        // Refresh analytics
+        // Refresh campaigns list
         setTimeout(() => {
-          handleViewCampaignDetails(campaign);
+          fetchCampaigns();
         }, 1000);
       }
     } catch (error) {
@@ -864,10 +726,11 @@ export default function CampaignsPage() {
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-8">
+    <div className="space-y-6">
+      {/* Header Section */}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Campaigns</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Campaigns</h1>
           <p className="text-gray-600 mt-2">
             Create and manage your email campaigns
           </p>
@@ -878,9 +741,9 @@ export default function CampaignsPage() {
             </div>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           {/* Global Tracking Controls */}
-          <div className="flex items-center gap-2 mr-4">
+          <div className="flex items-center gap-2">
             <Button
               variant={globalTrackingEnabled ? "default" : "outline"}
               size="sm"
@@ -890,12 +753,12 @@ export default function CampaignsPage() {
               {globalTrackingEnabled ? (
                 <>
                   <Activity className="h-4 w-4" />
-                  <span>Live Tracking</span>
+                  <span className="hidden sm:inline">Live Tracking</span>
                 </>
               ) : (
                 <>
                   <Zap className="h-4 w-4" />
-                  <span>Enable Tracking</span>
+                  <span className="hidden sm:inline">Enable Tracking</span>
                 </>
               )}
             </Button>
@@ -918,18 +781,20 @@ export default function CampaignsPage() {
             )}
           </div>
 
-          <Button variant="outline" onClick={() => setQuickSendDialogOpen(true)}>
+          <Button variant="outline" onClick={() => setQuickSendDialogOpen(true)} className="w-full sm:w-auto">
             <Upload className="mr-2 h-4 w-4" />
-            Quick Send CSV
+            <span className="hidden sm:inline">Quick Send CSV</span>
+            <span className="sm:hidden">Quick Send</span>
           </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="w-full sm:w-auto">
                 <Plus className="mr-2 h-4 w-4" />
-                Create Campaign
+                <span className="hidden sm:inline">Create Campaign</span>
+                <span className="sm:hidden">Create</span>
               </Button>
             </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-0">
             <DialogHeader>
               <DialogTitle>Create New Campaign</DialogTitle>
               <DialogDescription>
@@ -940,7 +805,7 @@ export default function CampaignsPage() {
               {/* Sending Method Selector */}
               <div className="space-y-2">
                 <Label>Sending Method *</Label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div
                     onClick={() => gmailConnected && setSendingMethod("gmail")}
                     className={`border rounded-lg p-3 cursor-pointer transition-all ${
@@ -993,10 +858,10 @@ export default function CampaignsPage() {
                 </div>
                 {sendingMethod === "gmail" && !gmailConnected && (
                   <p className="text-xs text-red-600">
-                    <a href="/dashboard/settings" className="underline font-medium">
+                    <a href="/dashboard/gmail-verification" className="underline font-medium">
                       Connect Gmail
                     </a>{" "}
-                    in Settings to use this option
+                    to use this option
                   </p>
                 )}
               </div>
@@ -1215,153 +1080,126 @@ export default function CampaignsPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Campaign</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Recipients</TableHead>
-                <TableHead>Opens</TableHead>
-                <TableHead>Clicks</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+        <>
+          {/* Desktop Table View */}
+          <Card className="hidden lg:block">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[200px]">Campaign</TableHead>
+                    <TableHead className="w-[90px]">Status</TableHead>
+                    <TableHead className="w-[100px]">Date</TableHead>
+                    <TableHead className="w-[70px]">Recipients</TableHead>
+                    <TableHead className="w-[70px]">Opens</TableHead>
+                    <TableHead className="w-[70px]">Clicks</TableHead>
+                    <TableHead className="w-[150px] text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+              <TableBody>
               {campaigns.map((campaign, index) => (
                 <TableRow key={campaign.id || `campaign-${index}`} className="hover:bg-gray-50">
-                  <TableCell className="max-w-md">
+                  <TableCell className="w-[200px]">
                     <div className="space-y-1">
-                      <p className="font-semibold text-gray-900">{campaign.subject}</p>
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <Mail className="h-3 w-3" />
-                        <span>{campaign.fromEmail}</span>
+                      <p className="font-semibold text-gray-900 truncate text-sm">{campaign.subject}</p>
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                        <Mail className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{campaign.fromEmail}</span>
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
+                  <TableCell className="w-[90px]">
+                    <div className="flex items-center gap-1">
                       {campaign.status === "sent" ? (
                         <>
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <div>
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              Sent
-                            </span>
-                            {campaign.sentAt && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                {new Date(campaign.sentAt).toLocaleDateString()}
-                              </p>
-                            )}
-                          </div>
+                          <CheckCircle className="h-3 w-3 text-green-600" />
+                          <span className="inline-flex items-center px-1 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Sent
+                          </span>
                         </>
                       ) : (
                         <>
-                          <Clock className="h-4 w-4 text-gray-400" />
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                          <Clock className="h-3 w-3 text-gray-400" />
+                          <span className="inline-flex items-center px-1 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                             Draft
                           </span>
                         </>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm">
+                  <TableCell className="w-[100px] text-sm">
                     <div className="space-y-1">
-                      <p className="text-gray-900">
+                      <p className="text-gray-900 truncate text-xs">
                         {campaign.sentAt 
-                          ? new Date(campaign.sentAt).toLocaleString()
-                          : new Date(campaign.createdAt).toLocaleString()}
+                          ? new Date(campaign.sentAt).toLocaleDateString()
+                          : new Date(campaign.createdAt).toLocaleDateString()}
                       </p>
                       <p className="text-xs text-gray-500">
                         {campaign.sentAt ? "Sent" : "Created"}
                       </p>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-gray-400" />
-                      <span className="font-medium">{campaign.sentCount || 0}</span>
+                  <TableCell className="w-[70px]">
+                    <div className="flex items-center gap-1">
+                      <Users className="h-3 w-3 text-gray-400" />
+                      <span className="font-medium text-sm">{getRealTimeData(campaign.id, 'sentCount', campaign.sentCount)}</span>
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="w-[70px]">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Eye className="h-4 w-4 text-blue-500" />
-                        <span className="font-medium">
+                      <div className="flex items-center gap-1">
+                        <Eye className="h-3 w-3 text-blue-500" />
+                        <span className="font-medium text-sm">
                           {getRealTimeData(campaign.id, 'openCount', campaign.openCount)}
                         </span>
                         {globalTrackingData[campaign.id] && (
-                          <div className="flex items-center gap-1">
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                            <span className="text-xs text-green-600 font-medium">Live</span>
-                          </div>
+                          <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div>
                         )}
                       </div>
                       {getRealTimeData(campaign.id, 'sentCount', campaign.sentCount) > 0 && (
                         <p className="text-xs text-gray-500">
-                          {(getRealTimeData(campaign.id, 'openCount', campaign.openCount) / getRealTimeData(campaign.id, 'sentCount', campaign.sentCount) * 100).toFixed(1)}%
+                          {((getRealTimeData(campaign.id, 'openCount', campaign.openCount) / getRealTimeData(campaign.id, 'sentCount', campaign.sentCount)) * 100).toFixed(1)}%
                         </p>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="w-[70px]">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <MousePointer className="h-4 w-4 text-purple-500" />
-                        <span className="font-medium">
+                      <div className="flex items-center gap-1">
+                        <MousePointer className="h-3 w-3 text-purple-500" />
+                        <span className="font-medium text-sm">
                           {getRealTimeData(campaign.id, 'clickCount', campaign.clickCount)}
                         </span>
                         {globalTrackingData[campaign.id] && (
-                          <div className="flex items-center gap-1">
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                            <span className="text-xs text-green-600 font-medium">Live</span>
-                          </div>
+                          <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div>
                         )}
                       </div>
                       {getRealTimeData(campaign.id, 'sentCount', campaign.sentCount) > 0 && (
                         <p className="text-xs text-gray-500">
-                          {(getRealTimeData(campaign.id, 'clickCount', campaign.clickCount) / getRealTimeData(campaign.id, 'sentCount', campaign.sentCount) * 100).toFixed(1)}%
+                          {((getRealTimeData(campaign.id, 'clickCount', campaign.clickCount) / getRealTimeData(campaign.id, 'sentCount', campaign.sentCount)) * 100).toFixed(1)}%
                         </p>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="w-[150px]">
                     <div className="flex items-center justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleViewCampaignDetails(campaign)}
-                        title="View campaign details"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
                       {campaign.status === "sent" && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleViewRecipients(campaign)}
-                            title="View recipients"
-                          >
-                            <Users className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleViewDetailedTracking(campaign)}
-                            title="View detailed tracking data"
-                            className="text-blue-600 hover:text-blue-700"
-                          >
-                            <BarChart3 className="h-4 w-4" />
-                          </Button>
-                        </>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleViewDetailedTracking(campaign)}
+                          title="View detailed tracking data"
+                          className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700"
+                        >
+                          <BarChart3 className="h-4 w-4" />
+                        </Button>
                       )}
                       {campaign.status === "draft" && (
                         <Button
                           size="sm"
                           onClick={() => handleSendClick(campaign)}
                           disabled={sending === campaign.id}
+                          className="h-8 px-3 text-xs"
                         >
                           {sending === campaign.id ? (
                             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
@@ -1376,10 +1214,11 @@ export default function CampaignsPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleDeleteCampaign(campaign)}
+                        onClick={() => handleDeleteClick(campaign)}
                         title="Delete campaign"
+                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
-                        <Trash2 className="h-4 w-4 text-red-600" />
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </TableCell>
@@ -1387,12 +1226,140 @@ export default function CampaignsPage() {
               ))}
             </TableBody>
           </Table>
-        </Card>
+          </div>
+          </Card>
+
+          {/* Mobile Card View */}
+          <div className="lg:hidden space-y-4">
+            {campaigns.map((campaign, index) => (
+              <Card key={campaign.id || `campaign-${index}`} className="p-4">
+                <div className="space-y-3">
+                  {/* Campaign Info */}
+                  <div className="space-y-2">
+                    <h3 className="font-semibold text-gray-900 text-lg">{campaign.subject}</h3>
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <Mail className="h-4 w-4" />
+                      <span>{campaign.fromEmail}</span>
+                    </div>
+                  </div>
+
+                  {/* Status and Date */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {campaign.status === "sent" ? (
+                        <>
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Sent
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="h-4 w-4 text-gray-400" />
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            Draft
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {campaign.sentAt 
+                        ? new Date(campaign.sentAt).toLocaleDateString()
+                        : new Date(campaign.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-3 gap-4 py-3 border-t border-gray-100">
+                    <div className="text-center">
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <Users className="h-4 w-4 text-gray-400" />
+                        <span className="font-semibold text-lg">{getRealTimeData(campaign.id, 'sentCount', campaign.sentCount)}</span>
+                      </div>
+                      <p className="text-xs text-gray-500">Recipients</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <Eye className="h-4 w-4 text-blue-500" />
+                        <span className="font-semibold text-lg">{getRealTimeData(campaign.id, 'openCount', campaign.openCount)}</span>
+                        {globalTrackingData[campaign.id] && (
+                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">Opens</p>
+                      {getRealTimeData(campaign.id, 'sentCount', campaign.sentCount) > 0 && (
+                        <p className="text-xs text-gray-400">
+                          {((getRealTimeData(campaign.id, 'openCount', campaign.openCount) / getRealTimeData(campaign.id, 'sentCount', campaign.sentCount)) * 100).toFixed(1)}%
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-center">
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <MousePointer className="h-4 w-4 text-purple-500" />
+                        <span className="font-semibold text-lg">{getRealTimeData(campaign.id, 'clickCount', campaign.clickCount)}</span>
+                        {globalTrackingData[campaign.id] && (
+                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">Clicks</p>
+                      {getRealTimeData(campaign.id, 'sentCount', campaign.sentCount) > 0 && (
+                        <p className="text-xs text-gray-400">
+                          {((getRealTimeData(campaign.id, 'clickCount', campaign.clickCount) / getRealTimeData(campaign.id, 'sentCount', campaign.sentCount)) * 100).toFixed(1)}%
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+                    {campaign.status === "sent" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleViewDetailedTracking(campaign)}
+                        title="View detailed tracking data"
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        <BarChart3 className="h-4 w-4 mr-1" />
+                        Analytics
+                      </Button>
+                    )}
+                    {campaign.status === "draft" && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleSendClick(campaign)}
+                        disabled={sending === campaign.id}
+                      >
+                        {sending === campaign.id ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4 mr-1" />
+                            Send
+                          </>
+                        )}
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDeleteClick(campaign)}
+                      title="Delete campaign"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
       )}
 
       {/* Send Method Selection Dialog */}
       <Dialog open={sendMethodDialogOpen} onOpenChange={setSendMethodDialogOpen}>
-        <DialogContent>
+        <DialogContent className="mx-4 sm:mx-0">
           <DialogHeader>
             <DialogTitle>Choose Sending Method</DialogTitle>
             <DialogDescription>
@@ -1430,7 +1397,7 @@ export default function CampaignsPage() {
                     <span className="text-green-600 font-medium">● Connected</span>
                   ) : (
                     <span className="text-red-600 font-medium">
-                      ● Not connected - <a href="/dashboard/settings" className="underline">Connect in Settings</a>
+                      ● Not connected - <a href="/dashboard/gmail-verification" className="underline">Connect Gmail</a>
                     </span>
                   )}
                 </p>
@@ -1493,7 +1460,7 @@ export default function CampaignsPage() {
 
       {/* HTML Preview Dialog */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
+        <DialogContent className="max-w-4xl max-h-[90vh] mx-4 sm:mx-0">
           <DialogHeader>
             <DialogTitle>Email Preview</DialogTitle>
           </DialogHeader>
@@ -1506,109 +1473,10 @@ export default function CampaignsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Recipients Dialog */}
-      <Dialog open={recipientsDialogOpen} onOpenChange={setRecipientsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle>Campaign Recipients</DialogTitle>
-            <DialogDescription>
-              {selectedCampaignForRecipients?.subject} - Sent to {recipients.length} subscriber(s)
-            </DialogDescription>
-          </DialogHeader>
-
-          {loadingRecipients ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-4">
-                  <div className="text-sm">
-                    <span className="font-semibold">{recipients.length}</span> total recipients
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    Sent from: <span className="font-mono">{selectedCampaignForRecipients?.fromEmail}</span>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleExportRecipients}
-                  disabled={recipients.length === 0}
-                >
-                  <FileDown className="h-4 w-4 mr-2" />
-                  Export CSV
-                </Button>
-              </div>
-
-              <div className="border rounded-lg max-h-[60vh] overflow-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Sent At</TableHead>
-                      <TableHead>Opened</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recipients.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-gray-500">
-                          No recipients found
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      recipients.map((recipient, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-mono text-sm">{recipient.email}</TableCell>
-                          <TableCell>{recipient.name}</TableCell>
-                          <TableCell>
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                recipient.status === "sent"
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-gray-100 text-gray-800"
-                              }`}
-                            >
-                              {recipient.status}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-sm text-gray-600">
-                            {recipient.sentAt ? new Date(recipient.sentAt).toLocaleString() : "N/A"}
-                          </TableCell>
-                          <TableCell>
-                            {recipient.openedAt ? (
-                              <div className="flex items-center gap-1 text-green-600">
-                                <Eye className="h-4 w-4" />
-                                <span className="text-xs">
-                                  {new Date(recipient.openedAt).toLocaleString()}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-gray-400">Not opened</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </>
-          )}
-
-          <DialogFooter>
-            <Button onClick={() => setRecipientsDialogOpen(false)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Quick Send Dialog */}
       <Dialog open={quickSendDialogOpen} onOpenChange={setQuickSendDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-0">
           <DialogHeader>
             <DialogTitle>Quick Send - Upload CSV & Send</DialogTitle>
             <DialogDescription>
@@ -1867,7 +1735,7 @@ export default function CampaignsPage() {
 
       {/* Sending Progress Dialog */}
       <Dialog open={sendingProgress} onOpenChange={() => {}}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl mx-4 sm:mx-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <RefreshCw className="h-5 w-5 animate-spin text-blue-600" />
@@ -1969,225 +1837,10 @@ export default function CampaignsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Campaign Details Dialog */}
-      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl">
-              <Mail className="h-6 w-6 text-blue-600" />
-              Campaign Details
-            </DialogTitle>
-            <DialogDescription>
-              Complete information about this campaign
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedCampaignDetails && (
-            <div className="space-y-6 py-4">
-              {/* Campaign Information */}
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-sm font-semibold text-gray-600">Subject Line</Label>
-                    <p className="text-lg font-medium mt-1">{selectedCampaignDetails.subject}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-semibold text-gray-600">From Email</Label>
-                    <p className="text-sm mt-1">{selectedCampaignDetails.fromEmail}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-semibold text-gray-600">Status</Label>
-                    <div className="mt-1">
-                      <span
-                        className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                          selectedCampaignDetails.status === "sent"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-gray-100 text-gray-800"
-                        }`}
-                      >
-                        {selectedCampaignDetails.status}
-                      </span>
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-semibold text-gray-600">Created At</Label>
-                    <p className="text-sm mt-1">
-                      {new Date(selectedCampaignDetails.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Statistics */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-semibold text-gray-600">Campaign Statistics</Label>
-                    <div className="flex items-center gap-2">
-                      {isConnected ? (
-                        <div className="flex items-center gap-1 text-green-600">
-                          <Wifi className="h-4 w-4" />
-                          <span className="text-xs">Live</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 text-red-600">
-                          <WifiOff className="h-4 w-4" />
-                          <span className="text-xs">Offline</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {loadingStats && !trackingData ? (
-                    <div className="flex items-center justify-center py-8">
-                      <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
-                    </div>
-                  ) : (trackingData || campaignStats) ? (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <p className="text-3xl font-bold text-blue-700">
-                          {trackingData?.analytics?.totalSent || campaignStats?.totalSent || 0}
-                        </p>
-                        <p className="text-xs text-blue-600 mt-1">Total Sent</p>
-                      </div>
-                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                        <p className="text-3xl font-bold text-green-700">
-                          {trackingData?.analytics?.totalOpened || campaignStats?.opened || 0}
-                        </p>
-                        <p className="text-xs text-green-600 mt-1">Opened</p>
-                      </div>
-                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                        <p className="text-3xl font-bold text-purple-700">
-                          {trackingData?.analytics?.openRate || campaignStats?.openRate?.toFixed(1) || '0.0'}%
-                        </p>
-                        <p className="text-xs text-purple-600 mt-1">Open Rate</p>
-                      </div>
-                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                        <p className="text-3xl font-bold text-orange-700">
-                          {trackingData?.analytics?.clickRate || campaignStats?.clickRate?.toFixed(1) || '0.0'}%
-                        </p>
-                        <p className="text-xs text-orange-600 mt-1">Click Rate</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
-                      <p className="text-sm text-gray-600">
-                        {selectedCampaignDetails.status === "draft"
-                          ? "Statistics will be available after sending"
-                          : "No statistics available"}
-                      </p>
-                    </div>
-                  )}
-                  
-                  {trackingError && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                      <p className="text-xs text-red-600">{trackingError}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Email Preview */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-semibold text-gray-600">Email Content Preview</Label>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setPreviewHtml(selectedCampaignDetails.htmlContent);
-                      setPreviewOpen(true);
-                    }}
-                  >
-                    <Eye className="mr-2 h-4 w-4" />
-                    Full Preview
-                  </Button>
-                </div>
-                <div className="border rounded-lg p-4 bg-gray-50 max-h-64 overflow-y-auto">
-                  <div
-                    dangerouslySetInnerHTML={{
-                      __html: selectedCampaignDetails.htmlContent.substring(0, 1000) + 
-                        (selectedCampaignDetails.htmlContent.length > 1000 ? '...' : ''),
-                    }}
-                    className="prose prose-sm max-w-none"
-                  />
-                </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="flex items-center gap-3 pt-4 border-t">
-                <Label className="text-sm font-semibold text-gray-600">Quick Actions:</Label>
-                {selectedCampaignDetails.status === "sent" && (
-                  <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setDetailsDialogOpen(false);
-                      handleViewRecipients(selectedCampaignDetails);
-                    }}
-                  >
-                    <Users className="mr-2 h-4 w-4" />
-                    View Recipients
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setDetailsDialogOpen(false);
-                      handleViewDetailedTracking(selectedCampaignDetails);
-                    }}
-                    className="text-blue-600 hover:text-blue-700"
-                  >
-                    <BarChart3 className="mr-2 h-4 w-4" />
-                    Detailed Tracking
-                  </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleSimulateTracking(selectedCampaignDetails)}
-                      className="text-green-600 hover:text-green-700"
-                    >
-                      <Eye className="mr-2 h-4 w-4" />
-                      Simulate Tracking
-                    </Button>
-                  </>
-                )}
-                {selectedCampaignDetails.status === "draft" && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setDetailsDialogOpen(false);
-                      handleSendClick(selectedCampaignDetails);
-                    }}
-                  >
-                    <Send className="mr-2 h-4 w-4" />
-                    Send Campaign
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-red-600 hover:text-red-700"
-                  onClick={() => {
-                    setDetailsDialogOpen(false);
-                    handleDeleteCampaign(selectedCampaignDetails);
-                  }}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Campaign
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button onClick={() => setDetailsDialogOpen(false)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Detailed Email Tracking Dialog */}
       <Dialog open={trackingDialogOpen} onOpenChange={setTrackingDialogOpen}>
-        <DialogContent className="max-w-7xl max-h-[95vh] overflow-hidden">
+        <DialogContent className="max-w-7xl max-h-[95vh] overflow-hidden mx-4 sm:mx-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl">
               <BarChart3 className="h-6 w-6 text-blue-600" />
@@ -2209,6 +1862,61 @@ export default function CampaignsPage() {
 
           <DialogFooter>
             <Button onClick={() => setTrackingDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-md mx-4 sm:mx-0">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              Delete Campaign
+            </DialogTitle>
+            <DialogDescription className="text-sm">
+              Are you sure you want to delete this campaign? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          {campaignToDelete && (
+            <div className="py-4">
+              <div className="bg-gray-50 border rounded-lg p-4">
+                <h4 className="font-semibold text-sm text-gray-900 mb-2">Campaign Details:</h4>
+                <div className="space-y-1 text-sm text-gray-600">
+                  <p><span className="font-medium">Subject:</span> {campaignToDelete.subject}</p>
+                  <p><span className="font-medium">From:</span> {campaignToDelete.fromEmail}</p>
+                  <p><span className="font-medium">Status:</span> 
+                    <span className={`ml-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                      campaignToDelete.status === "sent"
+                        ? "bg-green-100 text-green-800"
+                        : "bg-gray-100 text-gray-800"
+                    }`}>
+                      {campaignToDelete.status}
+                    </span>
+                  </p>
+                  <p><span className="font-medium">Created:</span> {new Date(campaignToDelete.createdAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={handleCancelDelete}
+              className="w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              className="w-full sm:w-auto"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Campaign
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
