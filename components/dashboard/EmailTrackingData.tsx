@@ -505,17 +505,22 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
                           <div className="space-y-1">
                             <div className="flex items-center gap-1">
                               {record.clicked ? (
-                                <CheckCircle className="h-3 w-3 text-green-600" />
+                                <>
+                                  <MousePointer className="h-3 w-3 text-purple-600" />
+                                  <span className="text-xs font-semibold text-purple-600">
+                                    YES!
+                                  </span>
+                                </>
                               ) : (
-                                <Clock className="h-3 w-3 text-gray-400" />
+                                <>
+                                  <Clock className="h-3 w-3 text-gray-400" />
+                                  <span className="text-xs text-gray-500">No</span>
+                                </>
                               )}
-                              <span className="text-xs">
-                                {record.clicked ? "Yes" : "No"}
-                              </span>
                             </div>
                             {record.clicked && (
-                              <div className="text-xs text-gray-500">
-                                {formatDateTime(record.clickedAt)}
+                              <div className="text-xs bg-purple-50 text-purple-800 px-2 py-1 rounded">
+                                🎯 {formatDateTime(record.clickedAt)}
                                 {record.clickCount > 1 && (
                                   <span className="ml-1">({record.clickCount}x)</span>
                                 )}
@@ -638,21 +643,30 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
                         <span className="text-gray-500">Clicked:</span>
                         <div className="flex items-center gap-1 mt-1">
                           {record.clicked ? (
-                            <CheckCircle className="h-3 w-3 text-green-600" />
+                            <>
+                              <MousePointer className="h-3 w-3 text-purple-600" />
+                              <span className="text-purple-600 font-semibold">
+                                YES - Clicked!
+                              </span>
+                            </>
                           ) : (
-                            <Clock className="h-3 w-3 text-gray-400" />
+                            <>
+                              <Clock className="h-3 w-3 text-gray-400" />
+                              <span className="text-gray-500">No</span>
+                            </>
                           )}
-                          <span className="text-gray-900">
-                            {record.clicked ? "Yes" : "No"}
-                          </span>
                         </div>
                         {record.clicked && (
-                          <p className="text-gray-500 mt-1">
-                            {formatDateTime(record.clickedAt)}
+                          <div className="mt-1 p-2 bg-purple-50 border border-purple-200 rounded">
+                            <p className="text-purple-800 text-xs font-medium">
+                              🎯 Clicked at: {formatDateTime(record.clickedAt)}
+                            </p>
                             {record.clickCount > 1 && (
-                              <span className="ml-1">({record.clickCount}x)</span>
+                              <p className="text-purple-600 text-xs mt-1">
+                                🔄 Total clicks: {record.clickCount}
+                              </p>
                             )}
-                          </p>
+                          </div>
                         )}
                       </div>
                     </div>
