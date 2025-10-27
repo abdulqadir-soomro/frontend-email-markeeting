@@ -133,7 +133,10 @@ export default function DomainsPage() {
 
     try {
       const data = await domainAPI.getDNSRecords(domain.id);
-      setDnsRecords(data.data);
+      console.log('DNS Records API response:', data);
+      // Extract the dnsRecords array from the response
+      const recordsArray = data.data?.dnsRecords || data.data || [];
+      setDnsRecords(recordsArray);
     } catch (error) {
       console.error("Error fetching DNS records:", error);
       toast({
@@ -170,6 +173,18 @@ export default function DomainsPage() {
         }
       } else {
         // Provider integration - automatically add DNS records
+        console.log('DNS Records state:', dnsRecords);
+        
+        if (!dnsRecords || !Array.isArray(dnsRecords) || dnsRecords.length === 0) {
+          toast({
+            title: "❌ Error",
+            description: "DNS records not loaded. Please close this dialog and click the 🌐 Globe icon first to load DNS records.",
+            variant: "destructive",
+          });
+          setAutoVerifying(false);
+          return;
+        }
+        
         toast({
           title: "🚀 Auto-Adding DNS Records",
           description: `Connecting to ${selectedProvider} to add DNS records automatically...`,
@@ -179,7 +194,8 @@ export default function DomainsPage() {
         const result = await addDNSViaProvider(
           selectedDomainForAutoVerify,
           selectedProvider,
-          providerCredentials
+          providerCredentials,
+          dnsRecords
         );
 
         if (result.success) {
@@ -204,7 +220,13 @@ export default function DomainsPage() {
             }
           }, 2000);
         } else {
-          throw new Error(result.error || "Failed to add DNS records");
+          // Show error toast if Hostinger API failed
+          toast({
+            title: "⚠️ Hostinger API Unavailable",
+            description: result.error || "Please use the Manual DNS configuration method instead.",
+            variant: "destructive",
+          });
+          return; // Exit without throwing error
         }
       }
 
@@ -230,23 +252,54 @@ export default function DomainsPage() {
     }
   };
 
-  // Simulate adding DNS via provider (would be replaced with actual API calls)
+  // Real Hostinger DNS Integration via Backend
   const addDNSViaProvider = async (
     domain: Domain, 
     provider: string, 
-    credentials: any
+    credentials: any,
+    records?: any
   ): Promise<{ success: boolean; message: string; error?: string }> => {
-    // This would integrate with actual provider APIs
-    // For now, simulate success
-    console.log(`Adding DNS records via ${provider} for ${domain.domain}`, credentials);
-    
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    return {
-      success: true,
-      message: `DNS records added to ${provider}`,
-    };
+    try {
+      if (provider !== 'hostinger') {
+        throw new Error(`Unsupported provider: ${provider}`);
+      }
+
+      if (!credentials.apiKey) {
+        throw new Error('API token is required for Hostinger');
+      }
+
+      if (!records || !Array.isArray(records)) {
+        throw new Error('DNS records not loaded. Please wait for records to load or use manual DNS configuration.');
+      }
+
+      console.log(`Calling backend to add ${records.length} DNS records to Hostinger for ${domain.domain}...`);
+
+      // Call backend API instead of directly calling Hostinger (avoids CORS)
+      const result = await domainAPI.addDNSViaHostinger(domain.id, {
+        apiToken: credentials.apiKey,
+        dnsRecords: records,
+      });
+
+      return result;
+    } catch (error: any) {
+      console.error('Hostinger DNS API error:', error);
+      
+      // Show helpful message if Hostinger API is unavailable
+      if (error.message?.includes('Hostinger API endpoint error') || 
+          error.message?.includes('Cloudflare')) {
+        return {
+          success: false,
+          message: 'Hostinger API is currently unavailable',
+          error: 'Please use the Manual DNS configuration (📄 Manual button) to add your DNS records directly in Hostinger HPanel.',
+        };
+      }
+      
+      return {
+        success: false,
+        message: '❌ Failed to add DNS records to Hostinger',
+        error: error.message || 'Unknown error occurred',
+      };
+    }
   };
 
   const handleResetVerification = (domain: Domain) => {
@@ -1441,10 +1494,11 @@ export default function DomainsPage() {
                       <Input
                         id="hostinger-api-token"
                         type="password"
-                        placeholder="hst_xxxxxxxxxxxxxxxx"
+                        placeholder="Enter your API token"
                         value={providerCredentials.apiKey}
                         onChange={(e) => setProviderCredentials({ ...providerCredentials, apiKey: e.target.value })}
                         className="mt-1 font-mono text-xs"
+                        autoComplete="off"
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Get your API token from: 
@@ -1465,8 +1519,7 @@ export default function DomainsPage() {
                           <li>Log in to your Hostinger HPanel</li>
                           <li>Go to "Account" → "API Settings"</li>
                           <li>Click "Generate API Token"</li>
-                          <li>Copy the token (starts with "hst_")</li>
-                          <li>Paste it above</li>
+                          <li>Copy the full token and paste it above</li>
                         </ol>
                         <p className="mt-2 text-orange-800">
                           <strong>⚠️ Important:</strong> Keep your API token secure. It gives full access to your domain DNS.

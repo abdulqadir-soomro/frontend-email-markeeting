@@ -223,6 +223,12 @@ export const domainAPI = {
   resetVerification: (id: string) => apiFetch(`/domains/${id}/reset-verification`, {
     method: 'POST',
   }),
+  // Add DNS records via Hostinger
+  addDNSViaHostinger: (id: string, data: { apiToken: string; dnsRecords: any[] }) =>
+    apiFetch(`/domains/${id}/add-dns-hostinger`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };
 
 // Gmail API
