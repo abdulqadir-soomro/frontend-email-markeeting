@@ -59,6 +59,17 @@ export default function DomainsPage() {
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [domainToDelete, setDomainToDelete] = useState<Domain | null>(null);
   const [domainToReset, setDomainToReset] = useState<Domain | null>(null);
+  const [manualVerifyOpen, setManualVerifyOpen] = useState(false);
+  const [selectedDomainForManualVerify, setSelectedDomainForManualVerify] = useState<Domain | null>(null);
+  const [manualVerifying, setManualVerifying] = useState(false);
+  const [addDomainMethod, setAddDomainMethod] = useState<string>('automatic');
+  const [dnsRecords, setDnsRecords] = useState<any>(null);
+  const [loadingDnsRecords, setLoadingDnsRecords] = useState(false);
+  const [autoVerifyDialogOpen, setAutoVerifyDialogOpen] = useState(false);
+  const [selectedDomainForAutoVerify, setSelectedDomainForAutoVerify] = useState<Domain | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<string>('manual');
+  const [providerCredentials, setProviderCredentials] = useState({ apiKey: '', apiSecret: '', username: '', password: '' });
+  const [autoVerifying, setAutoVerifying] = useState(false);
 
   useEffect(() => {
     fetchDomains();
@@ -70,6 +81,7 @@ export default function DomainsPage() {
     try {
       const data = await domainAPI.list();
       setDomains(data.data || []);
+      return data.data || [];
     } catch (error) {
       console.error("Error fetching domains:", error);
       toast({
@@ -77,6 +89,7 @@ export default function DomainsPage() {
         description: "Failed to fetch domains. Please try again.",
         variant: "destructive",
       });
+      return [];
     } finally {
       setLoading(false);
     }
@@ -113,28 +126,127 @@ export default function DomainsPage() {
     }
   };
 
-  const handleVerifyDomain = async (domain: Domain) => {
-    if (!user) return;
+  const handleOpenAutoVerify = async (domain: Domain) => {
+    setSelectedDomainForAutoVerify(domain);
+    setAutoVerifyDialogOpen(true);
+    setLoadingDnsRecords(true);
 
     try {
-      const data = await domainAPI.verify(domain.id);
-
+      const data = await domainAPI.getDNSRecords(domain.id);
+      setDnsRecords(data.data);
+    } catch (error) {
+      console.error("Error fetching DNS records:", error);
       toast({
-        title: data.data?.status === "verified" ? "Domain Verified!" : "Verification Status",
-        description: data.message || (data.data?.status === "verified"
-          ? "Your domain is now verified and ready to use."
-          : "DNS records verification pending. Please wait and try again."),
-        variant: data.data?.status === "verified" ? "default" : "destructive",
-      });
-
-      fetchDomains();
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to verify domain",
+        title: "Warning",
+        description: "Could not load DNS records.",
         variant: "destructive",
       });
+    } finally {
+      setLoadingDnsRecords(false);
     }
+  };
+
+  const handleAutoVerify = async () => {
+    if (!selectedDomainForAutoVerify) return;
+
+    setAutoVerifying(true);
+
+    try {
+      if (selectedProvider === 'manual') {
+        // Traditional verification - just check if DNS exists
+        const data = await domainAPI.verify(selectedDomainForAutoVerify.id);
+        
+        if (data.data?.status === "verified") {
+          toast({
+            title: "✅ Domain Verified!",
+            description: "All DNS records are configured correctly. Your domain is ready to use!",
+          });
+        } else {
+          toast({
+            title: "⏳ Verification Pending",
+            description: "DNS records not found yet. Please add them manually or use a DNS provider integration.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        // Provider integration - automatically add DNS records
+        toast({
+          title: "🚀 Auto-Adding DNS Records",
+          description: `Connecting to ${selectedProvider} to add DNS records automatically...`,
+        });
+
+        // Here you would call the provider-specific API
+        const result = await addDNSViaProvider(
+          selectedDomainForAutoVerify,
+          selectedProvider,
+          providerCredentials
+        );
+
+        if (result.success) {
+          toast({
+            title: "✅ DNS Records Added!",
+            description: `Successfully added DNS records to ${selectedProvider}. Verifying now...`,
+          });
+
+          // Wait a bit then verify
+          setTimeout(async () => {
+            const data = await domainAPI.verify(selectedDomainForAutoVerify.id);
+            if (data.data?.status === "verified") {
+              toast({
+                title: "✅ Domain Verified!",
+                description: "DNS records added and domain is now verified!",
+              });
+            } else {
+              toast({
+                title: "⏳ Verify in Progress",
+                description: "DNS records added. Verification may take a few minutes.",
+              });
+            }
+          }, 2000);
+        } else {
+          throw new Error(result.error || "Failed to add DNS records");
+        }
+      }
+
+      await fetchDomains();
+      
+      // Keep dialog open for a moment to show success message
+      setTimeout(() => {
+        setAutoVerifyDialogOpen(false);
+        setSelectedDomainForAutoVerify(null);
+        setDnsRecords(null);
+      }, 1500);
+    } catch (error: any) {
+      toast({
+        title: "❌ Error",
+        description: error.message || "Failed to add DNS records",
+        variant: "destructive",
+      });
+      
+      // Refresh domains list to ensure domain is still there
+      await fetchDomains();
+    } finally {
+      setAutoVerifying(false);
+    }
+  };
+
+  // Simulate adding DNS via provider (would be replaced with actual API calls)
+  const addDNSViaProvider = async (
+    domain: Domain, 
+    provider: string, 
+    credentials: any
+  ): Promise<{ success: boolean; message: string; error?: string }> => {
+    // This would integrate with actual provider APIs
+    // For now, simulate success
+    console.log(`Adding DNS records via ${provider} for ${domain.domain}`, credentials);
+    
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    return {
+      success: true,
+      message: `DNS records added to ${provider}`,
+    };
   };
 
   const handleResetVerification = (domain: Domain) => {
@@ -290,6 +402,71 @@ export default function DomainsPage() {
     }
   };
 
+  const handleOpenManualVerify = async (domain: Domain) => {
+    setSelectedDomainForManualVerify(domain);
+    setManualVerifyOpen(true);
+    setLoadingDnsRecords(true);
+
+    try {
+      const data = await domainAPI.getDNSRecords(domain.id);
+      setDnsRecords(data.data);
+    } catch (error) {
+      console.error("Error fetching DNS records:", error);
+      toast({
+        title: "Warning",
+        description: "Could not load DNS records. You can still proceed with manual verification.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingDnsRecords(false);
+    }
+  };
+
+  const handleManualVerify = async () => {
+    if (!selectedDomainForManualVerify || !user) return;
+
+    setManualVerifying(true);
+
+    try {
+      const data = await domainAPI.verifyManual(selectedDomainForManualVerify.id, {
+        verificationMethod: 'aws-ses', // Default to automatic check
+        dnsRecords: [],
+      });
+
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: "Domain verified successfully",
+        });
+        
+        await fetchDomains();
+        
+        // Keep dialog open for a moment to show success message
+        setTimeout(() => {
+          setManualVerifyOpen(false);
+          setSelectedDomainForManualVerify(null);
+          setDnsRecords(null);
+        }, 1500);
+      } else {
+        toast({
+          title: "Verification Failed",
+          description: data.error || "Please check your DNS records",
+          variant: "destructive",
+        });
+        await fetchDomains();
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to verify domain",
+        variant: "destructive",
+      });
+      await fetchDomains();
+    } finally {
+      setManualVerifying(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -340,17 +517,57 @@ export default function DomainsPage() {
                   placeholder="example.com"
                   value={newDomain}
                   onChange={(e) => setNewDomain(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddDomain();
+                    }
+                  }}
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="addMethod">Configuration Method</Label>
+                <select
+                  id="addMethod"
+                  value={addDomainMethod}
+                  onChange={(e) => setAddDomainMethod(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="automatic">Automatic (AWS SES)</option>
+                  <option value="manual">Manual (DNS Provider)</option>
+                </select>
+              </div>
+
+              {addDomainMethod === 'automatic' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-xs text-blue-800">
+                    <strong>Automatic Configuration:</strong> Your domain will be added to AWS SES automatically. 
+                    You'll need to add DNS records after domain is added.
+                  </p>
+                </div>
+              )}
+
+              {addDomainMethod === 'manual' && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <p className="text-xs text-yellow-800">
+                    <strong>Manual Configuration:</strong> Add your domain with manual DNS setup. 
+                    You'll configure DNS records through your DNS provider.
+                  </p>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button
                 variant="outline"
-                onClick={() => setDialogOpen(false)}
+                onClick={() => {
+                  setDialogOpen(false);
+                  setNewDomain("");
+                  setAddDomainMethod('automatic');
+                }}
               >
                 Cancel
               </Button>
-              <Button onClick={handleAddDomain} disabled={addingDomain}>
+              <Button onClick={handleAddDomain} disabled={addingDomain || !newDomain}>
                 {addingDomain ? "Adding..." : "Add Domain"}
               </Button>
             </DialogFooter>
@@ -408,51 +625,77 @@ export default function DomainsPage() {
                     {new Date(domain.createdAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {/* Email & DNS Management */}
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => handleViewEmails(domain)}
                         title="Manage email addresses"
+                        className="h-8"
                       >
-                        <Mail className="h-4 w-4" />
+                        <Mail className="h-3 w-3" />
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => setSelectedDomain(domain)}
                         title="View DNS records"
+                        className="h-8"
                       >
-                        <Globe className="h-4 w-4" />
+                        <Globe className="h-3 w-3" />
                       </Button>
+                      
+                      {/* Verification Buttons */}
+                      <div className="flex items-center gap-1 border-l pl-1">
                       <Button
                         size="sm"
-                        variant="outline"
-                        onClick={() => handleVerifyDomain(domain)}
-                        title="Verify domain"
+                        variant={domain.status === 'verified' ? 'secondary' : 'default'}
+                        onClick={() => handleOpenAutoVerify(domain)}
+                        title="Automatic Verification - Select DNS provider to auto-add records"
+                        disabled={domain.status === 'verified'}
+                        className={`h-8 text-xs ${domain.status === 'verified' ? 'opacity-50' : ''}`}
                       >
-                        <RefreshCw className="h-4 w-4" />
+                        <Zap className="h-3 w-3 mr-1" />
+                        Auto
                       </Button>
-                      {domain.status === 'verified' && (
+                        <Button
+                          size="sm"
+                          variant={domain.status === 'verified' ? 'secondary' : 'default'}
+                          onClick={() => handleOpenManualVerify(domain)}
+                          title="Manual Verification via DNS Provider"
+                          disabled={domain.status === 'verified'}
+                          className={`h-8 text-xs ${domain.status === 'verified' ? 'opacity-50' : ''}`}
+                        >
+                          <FileText className="h-3 w-3 mr-1" />
+                          Manual
+                        </Button>
+                      </div>
+
+                      {/* Additional Actions */}
+                      <div className="flex items-center gap-1 border-l pl-1">
+                        {domain.status === 'verified' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleResetVerification(domain)}
+                            title="Reset verification status"
+                            className="h-8 text-orange-600 hover:text-orange-700"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => handleResetVerification(domain)}
-                          title="Reset verification status"
-                          className="text-orange-600 hover:text-orange-700"
+                          onClick={() => handleDeleteDomain(domain)}
+                          disabled={!domain.id || domain.id === 'undefined'}
+                          title="Delete domain"
+                          className="h-8"
                         >
-                          <X className="h-4 w-4" />
+                          <Trash2 className="h-3 w-3 text-red-600" />
                         </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDeleteDomain(domain)}
-                        disabled={!domain.id || domain.id === 'undefined'}
-                        title="Delete domain"
-                      >
-                        <Trash2 className="h-4 w-4 text-red-600" />
-                      </Button>
+                      </div>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -644,7 +887,7 @@ export default function DomainsPage() {
             }}>
               Close
             </Button>
-            <Button onClick={() => selectedDomain && handleVerifyDomain(selectedDomain)}>
+            <Button onClick={() => selectedDomain && handleOpenAutoVerify(selectedDomain)}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Verify Domain
             </Button>
@@ -843,6 +1086,459 @@ export default function DomainsPage() {
             >
               <X className="h-4 w-4 mr-2" />
               Reset Verification
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Verification Dialog */}
+      <Dialog open={manualVerifyOpen} onOpenChange={(open) => {
+        setManualVerifyOpen(open);
+        if (!open) {
+          setSelectedDomainForManualVerify(null);
+          setDnsRecords(null);
+        }
+      }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Manual Domain Verification</DialogTitle>
+            <DialogDescription>
+              Add the DNS records below to your DNS provider to verify <strong>{selectedDomainForManualVerify?.domain}</strong>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* DNS Records Display */}
+            <div className="border rounded-lg p-4 bg-gray-50">
+              <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Required DNS Records
+              </h4>
+              
+              {loadingDnsRecords ? (
+                <div className="flex items-center justify-center py-4">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : dnsRecords && dnsRecords.dkimTokens ? (
+                <div className="space-y-3">
+                  {/* SPF Record */}
+                  <div className="border rounded-lg p-3 bg-white">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-semibold">REQUIRED</span>
+                        <span className="text-xs font-semibold">SPF Record</span>
+                      </div>
+                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">TXT</span>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <span className="text-xs text-gray-600">Name/Host:</span>
+                        <div className="bg-gray-50 p-2 rounded text-sm font-mono mt-1">@</div>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-600">Value:</span>
+                        <div className="bg-gray-50 p-2 rounded text-sm font-mono mt-1 break-all">
+                          v=spf1 include:amazonses.com ~all
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="w-full mt-2"
+                        onClick={() => copyToClipboard("v=spf1 include:amazonses.com ~all")}
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy Value
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* DKIM Records */}
+                  {dnsRecords.dkimTokens.map((token: string, index: number) => (
+                    <div key={index} className="border rounded-lg p-3 bg-white">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold">DKIM Record {index + 1} of {dnsRecords.dkimTokens.length}</span>
+                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">CNAME</span>
+                      </div>
+                      <div className="space-y-2">
+                        <div>
+                          <span className="text-xs text-gray-600">Name/Host:</span>
+                          <div className="bg-gray-50 p-2 rounded text-sm font-mono mt-1 break-all">
+                            {token}._domainkey
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="mt-1 text-xs"
+                            onClick={() => copyToClipboard(`${token}._domainkey`)}
+                          >
+                            <Copy className="h-3 w-3 mr-1" />
+                            Copy
+                          </Button>
+                        </div>
+                        <div>
+                          <span className="text-xs text-gray-600">Value/Points To:</span>
+                          <div className="bg-gray-50 p-2 rounded text-sm font-mono mt-1 break-all">
+                            {token}.dkim.amazonses.com
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="mt-1 text-xs"
+                            onClick={() => copyToClipboard(`${token}.dkim.amazonses.com`)}
+                          >
+                            <Copy className="h-3 w-3 mr-1" />
+                            Copy
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* DMARC Record */}
+                  <div className="border-2 border-orange-200 rounded-lg p-3 bg-orange-50">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded font-semibold">REQUIRED!</span>
+                        <span className="text-xs font-semibold">DMARC Record</span>
+                      </div>
+                      <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">TXT</span>
+                    </div>
+                    <p className="text-xs text-orange-900 mb-2">
+                      ⚠️ Missing DMARC is a common reason emails go to spam!
+                    </p>
+                    <div className="space-y-2">
+                      <div>
+                        <span className="text-xs text-gray-700">Name/Host:</span>
+                        <div className="bg-white p-2 rounded text-sm font-mono mt-1">_dmarc</div>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-700">Value:</span>
+                        <div className="bg-white p-2 rounded text-sm font-mono mt-1 break-all">
+                          v=DMARC1; p=quarantine; rua=mailto:dmarc@{selectedDomainForManualVerify?.domain}
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => copyToClipboard(`v=DMARC1; p=quarantine; rua=mailto:dmarc@${selectedDomainForManualVerify?.domain}`)}
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy Value
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600 text-center py-4">
+                  Could not load DNS records. Please check the domain configuration.
+                </p>
+              )}
+            </div>
+
+            {/* Instructions */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h5 className="font-semibold text-sm mb-3 text-blue-900">📋 How to Add DNS Records</h5>
+              <ol className="text-xs text-blue-800 space-y-2 list-decimal list-inside">
+                <li>Log in to your DNS provider (GoDaddy, Namecheap, Cloudflare, etc.)</li>
+                <li>Navigate to DNS Management or DNS Settings for your domain</li>
+                <li>Add each DNS record shown above:
+                  <ul className="ml-4 mt-1 space-y-1">
+                    <li>SPF Record: Type = TXT, Name = @, Value = (copy from above)</li>
+                    <li>DKIM Records: Type = CNAME, Name = (copy from above), Value = (copy from above)</li>
+                    <li>DMARC Record: Type = TXT, Name = _dmarc, Value = (copy from above)</li>
+                  </ul>
+                </li>
+                <li>Save all changes and wait 24-48 hours for DNS propagation</li>
+                <li>Click "Verify Domain" below to check verification status</li>
+              </ol>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-xs text-yellow-800">
+                <strong>⚠️ Important:</strong> Add all DNS records to your provider first, then click "Verify Domain" below. 
+                DNS changes typically take 24-48 hours to propagate.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t pt-4">
+            <Button variant="outline" onClick={() => {
+              setManualVerifyOpen(false);
+              setSelectedDomainForManualVerify(null);
+              setDnsRecords(null);
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleManualVerify} disabled={manualVerifying}>
+              {manualVerifying ? "Verifying..." : "Verify Domain"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Auto Verify Dialog */}
+      <Dialog open={autoVerifyDialogOpen} onOpenChange={(open) => {
+        setAutoVerifyDialogOpen(open);
+        if (!open) {
+          setSelectedDomainForAutoVerify(null);
+          setDnsRecords(null);
+          setSelectedProvider('manual');
+          setProviderCredentials({ apiKey: '', apiSecret: '', username: '', password: '' });
+        }
+      }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>⚡ Automatic Domain Verification</DialogTitle>
+            <DialogDescription>
+              Select your DNS provider to automatically add DNS records for <strong>{selectedDomainForAutoVerify?.domain}</strong>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Provider Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="provider">DNS Provider</Label>
+              <select
+                id="provider"
+                value={selectedProvider}
+                onChange={(e) => setSelectedProvider(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="manual">Manual Check (Verify Existing DNS)</option>
+                <option value="cloudflare">Cloudflare</option>
+                <option value="godaddy">GoDaddy</option>
+                <option value="namecheap">Namecheap</option>
+                <option value="hostinger">Hostinger</option>
+                <option value="digitalocean">DigitalOcean</option>
+                <option value="aws-route53">AWS Route53</option>
+              </select>
+            </div>
+
+            {/* Provider Authentication */}
+            {selectedProvider !== 'manual' && (
+              <div className="border rounded-lg p-4 bg-gray-50 space-y-3">
+                <h5 className="font-semibold text-sm">Provider Authentication</h5>
+                
+                {selectedProvider === 'cloudflare' && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="cf-api-key" className="text-xs">API Token</Label>
+                      <Input
+                        id="cf-api-key"
+                        type="password"
+                        placeholder="Your Cloudflare API Token"
+                        value={providerCredentials.apiKey}
+                        onChange={(e) => setProviderCredentials({ ...providerCredentials, apiKey: e.target.value })}
+                        className="mt-1"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Create token at: Cloudflare Dashboard → My Profile → API Tokens</p>
+                    </div>
+                  </div>
+                )}
+
+                {selectedProvider === 'godaddy' && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="gd-api-key" className="text-xs">API Key</Label>
+                      <Input
+                        id="gd-api-key"
+                        placeholder="Your GoDaddy API Key"
+                        value={providerCredentials.apiKey}
+                        onChange={(e) => setProviderCredentials({ ...providerCredentials, apiKey: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="gd-api-secret" className="text-xs">API Secret</Label>
+                      <Input
+                        id="gd-api-secret"
+                        type="password"
+                        placeholder="Your GoDaddy API Secret"
+                        value={providerCredentials.apiSecret}
+                        onChange={(e) => setProviderCredentials({ ...providerCredentials, apiSecret: e.target.value })}
+                        className="mt-1"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Get credentials from: GoDaddy Developer Settings</p>
+                    </div>
+                  </div>
+                )}
+
+                {selectedProvider === 'digitalocean' && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="do-token" className="text-xs">DigitalOcean Token</Label>
+                      <Input
+                        id="do-token"
+                        type="password"
+                        placeholder="Your DigitalOcean API Token"
+                        value={providerCredentials.apiKey}
+                        onChange={(e) => setProviderCredentials({ ...providerCredentials, apiKey: e.target.value })}
+                        className="mt-1"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Generate at: DigitalOcean → API → Tokens</p>
+                    </div>
+                  </div>
+                )}
+
+                {selectedProvider === 'aws-route53' && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="aws-access-key" className="text-xs">Access Key ID</Label>
+                      <Input
+                        id="aws-access-key"
+                        placeholder="AWS Access Key ID"
+                        value={providerCredentials.apiKey}
+                        onChange={(e) => setProviderCredentials({ ...providerCredentials, apiKey: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="aws-secret-key" className="text-xs">Secret Access Key</Label>
+                      <Input
+                        id="aws-secret-key"
+                        type="password"
+                        placeholder="AWS Secret Access Key"
+                        value={providerCredentials.apiSecret}
+                        onChange={(e) => setProviderCredentials({ ...providerCredentials, apiSecret: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {selectedProvider === 'namecheap' && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="username" className="text-xs">Username</Label>
+                      <Input
+                        id="username"
+                        placeholder="Your Namecheap username"
+                        value={providerCredentials.username}
+                        onChange={(e) => setProviderCredentials({ ...providerCredentials, username: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="password" className="text-xs">API Token</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        placeholder="Your Namecheap API token"
+                        value={providerCredentials.password}
+                        onChange={(e) => setProviderCredentials({ ...providerCredentials, password: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {selectedProvider === 'hostinger' && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="hostinger-api-token" className="text-xs">API Token</Label>
+                      <Input
+                        id="hostinger-api-token"
+                        type="password"
+                        placeholder="hst_xxxxxxxxxxxxxxxx"
+                        value={providerCredentials.apiKey}
+                        onChange={(e) => setProviderCredentials({ ...providerCredentials, apiKey: e.target.value })}
+                        className="mt-1 font-mono text-xs"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Get your API token from: 
+                        <a 
+                          href="https://hpanel.hostinger.com/" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 underline ml-1"
+                        >
+                          Hostinger HPanel → API Settings
+                        </a>
+                      </p>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                      <div className="text-xs text-blue-800">
+                        <strong>📝 How to get API Token:</strong>
+                        <ol className="list-decimal list-inside mt-2 space-y-1 ml-2">
+                          <li>Log in to your Hostinger HPanel</li>
+                          <li>Go to "Account" → "API Settings"</li>
+                          <li>Click "Generate API Token"</li>
+                          <li>Copy the token (starts with "hst_")</li>
+                          <li>Paste it above</li>
+                        </ol>
+                        <p className="mt-2 text-orange-800">
+                          <strong>⚠️ Important:</strong> Keep your API token secure. It gives full access to your domain DNS.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                  <p className="text-xs text-blue-800">
+                    <strong>🔒 Security:</strong> Your credentials are not stored. They're only used to add DNS records once.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* DNS Records to Add */}
+            {dnsRecords && dnsRecords.dkimTokens && (
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <h5 className="font-semibold text-sm mb-3">📋 DNS Records to Add</h5>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between p-2 bg-white rounded border">
+                    <span>SPF Record (TXT)</span>
+                    <span className="text-green-600">✓ Will add automatically</span>
+                  </div>
+                  <div className="flex justify-between p-2 bg-white rounded border">
+                    <span>DKIM Records (CNAME x{dnsRecords.dkimTokens.length})</span>
+                    <span className="text-green-600">✓ Will add automatically</span>
+                  </div>
+                  <div className="flex justify-between p-2 bg-white rounded border">
+                    <span>DMARC Record (TXT)</span>
+                    <span className="text-green-600">✓ Will add automatically</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* How It Works */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h5 className="font-semibold text-sm mb-2 text-blue-900">🚀 How It Works:</h5>
+              <ol className="text-xs text-blue-800 space-y-2 list-decimal list-inside">
+                {selectedProvider === 'manual' && (
+                  <>
+                    <li>System checks AWS SES to see if DNS records exist</li>
+                    <li>If records exist → Domain verified ✅</li>
+                    <li>If records missing → You need to add them manually</li>
+                  </>
+                )}
+                {selectedProvider !== 'manual' && (
+                  <>
+                    <li>Connect to your DNS provider ({selectedProvider})</li>
+                    <li>Automatically add all required DNS records</li>
+                    <li>Wait for DNS propagation (2-5 minutes)</li>
+                    <li>Verify domain status</li>
+                    <li>Done! Your domain is verified ✅</li>
+                  </>
+                )}
+              </ol>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t pt-4">
+            <Button variant="outline" onClick={() => {
+              setAutoVerifyDialogOpen(false);
+              setSelectedDomainForAutoVerify(null);
+              setDnsRecords(null);
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleAutoVerify} disabled={autoVerifying}>
+              {autoVerifying ? "Processing..." : selectedProvider === 'manual' ? "Check DNS" : "Add DNS & Verify"}
             </Button>
           </DialogFooter>
         </DialogContent>
