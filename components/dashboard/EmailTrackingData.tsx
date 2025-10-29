@@ -54,9 +54,17 @@ interface EmailTrackingRecord {
   opened: boolean;
   openedAt?: string;
   openCount: number;
+  lastOpenUserAgent?: string;
+  lastOpenIP?: string;
+  lastOpenSource?: 'gmail-proxy' | 'direct' | 'unknown';
   clicked: boolean;
   clickedAt?: string;
   clickCount: number;
+  lastClickUserAgent?: string;
+  lastClickBrowser?: string;
+  lastClickOS?: string;
+  lastClickDevice?: string;
+  lastClickIP?: string;
   bounced: boolean;
   bouncedAt?: string;
   bounceReason?: string;
@@ -452,6 +460,7 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
                     <TableHead className="w-[120px]">Sent At</TableHead>
                     <TableHead className="w-[100px]">Opened</TableHead>
                     <TableHead className="w-[100px]">Clicked</TableHead>
+                    <TableHead className="w-[180px]">Device (Last Click)</TableHead>
                     <TableHead className="w-[100px]">Bounced</TableHead>
                     <TableHead className="w-[100px]">Complained</TableHead>
                     <TableHead className="w-[120px]">Time to Open</TableHead>
@@ -494,6 +503,9 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
                             {record.opened && (
                               <div className="text-xs text-gray-500">
                                 {formatDateTime(record.openedAt)}
+                                {record.lastOpenSource === 'gmail-proxy' && (
+                                  <span className="ml-1 text-[10px] px-1 py-0.5 bg-gray-100 border rounded">Gmail proxy</span>
+                                )}
                                 {record.openCount > 1 && (
                                   <span className="ml-1">({record.openCount}x)</span>
                                 )}
@@ -527,6 +539,16 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
                               </div>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell className="w-[180px] text-xs text-gray-600">
+                          {record.lastClickDevice || record.lastClickOS || record.lastClickBrowser ? (
+                            <div className="space-y-0.5">
+                              <div>{record.lastClickDevice || '—'}</div>
+                              <div className="text-gray-500">{record.lastClickOS || '—'} • {record.lastClickBrowser || '—'}</div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
                         </TableCell>
                         <TableCell className="w-[100px]">
                           <div className="space-y-1">
