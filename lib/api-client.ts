@@ -36,19 +36,36 @@ async function apiFetch(endpoint: string, options: RequestInit = {}) {
       headers,
     });
 
-    const data = await response.json();
+    // Parse JSON response with better error handling
+    let data;
+    try {
+      data = await response.json();
+    } catch (jsonError: any) {
+      // If JSON parsing fails, the response might be empty or invalid
+      // Read as text to get more info (but this consumes the body)
+      try {
+        const text = await response.clone().text();
+        throw new Error(`Invalid JSON response from server: ${jsonError.message}. Response: ${text.substring(0, 200)}`);
+      } catch {
+        throw new Error(`Invalid JSON response from server: ${jsonError.message}`);
+      }
+    }
 
     if (!response.ok) {
-      throw new Error(data.error || 'An error occurred');
+      throw new Error(data?.error || data?.message || `Server error: ${response.status} ${response.statusText}`);
     }
 
     return data;
-  } catch (error) {
+  } catch (error: any) {
     // Handle network errors gracefully
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new Error('Unable to connect to server. Please check if the backend is running.');
     }
-    throw error;
+    // If error already has a message, use it
+    if (error.message) {
+      throw error;
+    }
+    throw new Error('An unexpected error occurred');
   }
 }
 
@@ -248,13 +265,15 @@ export const gmailAPI = {
 // Tracking API
 export const trackingAPI = {
   getEmailTrackingData: (campaignId: string, params?: any) => {
-    const query = new URLSearchParams(params).toString();
-    return apiFetch(`/track/data/${campaignId}?${query}`);
+    const query = params ? new URLSearchParams(params).toString() : '';
+    const url = `/track/data/${campaignId}${query ? `?${query}` : ''}`;
+    return apiFetch(url);
   },
   
   getTrackingOverview: (params?: any) => {
-    const query = new URLSearchParams(params).toString();
-    return apiFetch(`/track/tracking-overview?${query}`);
+    const query = params ? new URLSearchParams(params).toString() : '';
+    const url = `/track/tracking-overview${query ? `?${query}` : ''}`;
+    return apiFetch(url);
   },
 };
 

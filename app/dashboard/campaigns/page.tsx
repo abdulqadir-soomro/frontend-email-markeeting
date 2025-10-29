@@ -118,6 +118,11 @@ export default function CampaignsPage() {
 
   // Detailed Tracking State
   const [trackingDialogOpen, setTrackingDialogOpen] = useState(false);
+  const handleTrackingDialogOpenChange = (open: boolean) => {
+    setTrackingDialogOpen(open);
+    // Pause global real-time tracking while the detailed dialog is open
+    setGlobalTrackingEnabled(!open);
+  };
   const [selectedCampaignForTracking, setSelectedCampaignForTracking] = useState<Campaign | null>(null);
 
 
@@ -1839,7 +1844,7 @@ export default function CampaignsPage() {
 
 
       {/* Detailed Email Tracking Dialog */}
-      <Dialog open={trackingDialogOpen} onOpenChange={setTrackingDialogOpen}>
+      <Dialog open={trackingDialogOpen} onOpenChange={handleTrackingDialogOpenChange}>
         <DialogContent className="max-w-7xl max-h-[95vh] overflow-hidden mx-4 sm:mx-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl">
@@ -1923,4 +1928,3 @@ export default function CampaignsPage() {
     </div>
   );
 }
-
