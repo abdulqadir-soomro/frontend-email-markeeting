@@ -109,6 +109,12 @@ export const campaignAPI = {
 
   get: (id: string) => apiFetch(`/campaigns/${id}`),
 
+  update: (id: string, data: any) =>
+    apiFetch(`/campaigns/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
   send: (id: string, sendingMethod: 'ses' | 'gmail') =>
     apiFetch(`/campaigns/${id}/send`, {
       method: 'POST',
@@ -172,6 +178,11 @@ export const subscriberAPI = {
 export const templateAPI = {
   create: (data: any) =>
     apiFetch('/templates', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  generateWithAI: (data: { prompt: string; tone?: string; callToAction?: string; brandName?: string; subjectHint?: string; save?: boolean; existingSubject?: string; existingHtml?: string; editPrompt?: string }) =>
+    apiFetch('/templates/generate', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

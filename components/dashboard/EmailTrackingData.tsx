@@ -191,8 +191,8 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
       "Bounced",
       "Bounced At",
       "Bounce Reason",
-      "Complained",
-      "Complained At",
+      "Reported",
+      "Reported At",
       "Time to Open (min)"
     ];
 
@@ -354,7 +354,7 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-2xl font-bold text-orange-600">{summary.totalComplained}</p>
-                  <p className="text-xs text-gray-600">Complained</p>
+                  <p className="text-xs text-gray-600">Reported</p>
                 </div>
                 <AlertTriangle className="h-8 w-8 text-orange-500" />
               </div>
@@ -443,7 +443,7 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
                   <SelectItem value="opened">Opened</SelectItem>
                   <SelectItem value="clicked">Clicked</SelectItem>
                   <SelectItem value="bounced">Bounced</SelectItem>
-                  <SelectItem value="complained">Complained</SelectItem>
+                  <SelectItem value="complained">Reported</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -462,7 +462,7 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
                     <TableHead className="w-[100px]">Clicked</TableHead>
                     <TableHead className="w-[180px]">Device (Last Click)</TableHead>
                     <TableHead className="w-[100px]">Bounced</TableHead>
-                    <TableHead className="w-[100px]">Complained</TableHead>
+                    <TableHead className="w-[100px]">Reported</TableHead>
                     <TableHead className="w-[120px]">Time to Open</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -577,7 +577,7 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
                         <TableCell className="w-[100px]">
                           <div className="space-y-1">
                             <div className="flex items-center gap-1">
-                              {record.complained ? (
+                        {record.complained ? (
                                 <AlertTriangle className="h-3 w-3 text-orange-600" />
                               ) : (
                                 <CheckCircle className="h-3 w-3 text-green-600" />
@@ -716,7 +716,7 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
                         )}
                       </div>
                       <div>
-                        <span className="text-gray-500">Complained:</span>
+                        <span className="text-gray-500">Reported:</span>
                         <div className="flex items-center gap-1 mt-1">
                           {record.complained ? (
                             <AlertTriangle className="h-3 w-3 text-orange-600" />
@@ -724,7 +724,7 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
                             <CheckCircle className="h-3 w-3 text-green-600" />
                           )}
                           <span className="text-gray-900">
-                            {record.complained ? "Yes" : "No"}
+                              {record.complained ? "Yes" : "No"}
                           </span>
                         </div>
                         {record.complained && (

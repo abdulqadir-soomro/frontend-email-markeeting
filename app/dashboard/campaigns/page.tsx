@@ -38,7 +38,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/use-toast";
-import { Plus, Mail, Send, Trash2, Eye, Settings, Globe, Users, Download, FileDown, Upload, RefreshCw, CheckCircle, X, Clock, Wifi, WifiOff, BarChart3, Activity, Zap, MousePointer } from "lucide-react";
+import { Plus, Mail, Send, Trash2, Eye, Settings, Globe, Users, Download, FileDown, Upload, RefreshCw, CheckCircle, X, Clock, Wifi, WifiOff, BarChart3, Activity, Zap, MousePointer, Sparkles } from "lucide-react";
 import { campaignAPI, domainAPI, templateAPI, subscriberAPI, gmailAPI, trackingAPI } from "@/lib/api-client";
 import { useRealtimeTracking } from "@/lib/use-realtime-tracking";
 import EmailTrackingData from "@/components/dashboard/EmailTrackingData";
@@ -125,10 +125,65 @@ export default function CampaignsPage() {
   };
   const [selectedCampaignForTracking, setSelectedCampaignForTracking] = useState<Campaign | null>(null);
 
+  // AI Generation State
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+
 
   // Global real-time tracking for all campaigns (enhanced)
   const [globalTrackingEnabled, setGlobalTrackingEnabled] = useState(true);
   const [globalTrackingData, setGlobalTrackingData] = useState<{[key: string]: any}>({});
+
+  // Edit Campaign dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+  const [editFromName, setEditFromName] = useState("");
+  const [editFromEmail, setEditFromEmail] = useState("");
+  const [editSubject, setEditSubject] = useState("");
+  const [editHtml, setEditHtml] = useState("");
+  const [editTemplateId, setEditTemplateId] = useState<string>("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const openEditDialog = (campaign: Campaign) => {
+    setEditingCampaign(campaign);
+    setEditFromName(campaign.fromName || "");
+    setEditFromEmail(campaign.fromEmail || "");
+    setEditSubject(campaign.subject || "");
+    setEditHtml((campaign as any).htmlContent || "");
+    setEditTemplateId(((campaign as any).templateId as any)?.id || "");
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingCampaign) return;
+    if (!editSubject || !editHtml || !editFromEmail || !editFromName) {
+      toast({ title: "Missing fields", description: "Fill subject, content, from name/email", variant: "destructive" });
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const payload: any = {
+        subject: editSubject,
+        htmlContent: editHtml,
+        fromEmail: editFromEmail,
+        fromName: editFromName,
+      };
+      if (editTemplateId && editTemplateId !== "scratch") payload.templateId = editTemplateId;
+      else payload.templateId = ""; // clear
+
+      const res = await campaignAPI.update(editingCampaign.id, payload);
+      if (!res.success) throw new Error(res.error || "Failed to update campaign");
+      toast({ title: "Campaign updated" });
+      setEditDialogOpen(false);
+      setEditingCampaign(null);
+      fetchCampaigns();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
   const [globalTrackingConnected, setGlobalTrackingConnected] = useState(false);
   const [globalTrackingError, setGlobalTrackingError] = useState<string | null>(null);
 
@@ -142,77 +197,129 @@ export default function CampaignsPage() {
 
 
   // Enhanced global tracking effect for all campaigns
+  // Optimized: Poll-based tracking instead of multiple SSE connections
   useEffect(() => {
-    if (!globalTrackingEnabled || campaigns.length === 0) return;
+    if (!globalTrackingEnabled || campaigns.length === 0) {
+      setGlobalTrackingConnected(false);
+      return;
+    }
 
-    console.log('🌐 Setting up global tracking for', campaigns.length, 'campaigns');
+    console.log('🌐 Setting up optimized global tracking for', campaigns.length, 'campaigns');
 
-    // Create EventSource connections for all sent campaigns
-    const sentCampaigns = campaigns.filter(c => c.status === 'sent');
-    const eventSources: EventSource[] = [];
+    // Limit to only recently sent campaigns (last 30 days) to reduce load
+    const sentCampaigns = campaigns
+      .filter(c => c.status === 'sent')
+      .slice(0, 20); // Limit to max 20 campaigns
 
-    sentCampaigns.forEach(campaign => {
+    if (sentCampaigns.length === 0) {
+      setGlobalTrackingConnected(false);
+      return;
+    }
+
+    let isActive = true;
+    let pollInterval: NodeJS.Timeout | null = null;
+
+    // Poll-based tracking: Fetch all campaigns in one batch every 30 seconds
+    const fetchAllTracking = async () => {
+      if (!isActive) return;
+
       try {
         const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-        const trackingUrl = `${baseUrl}/track/realtime/${campaign.id}`;
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
         
-        console.log(`🔗 Global tracking for campaign ${campaign.id}:`, trackingUrl);
+        if (!token) {
+          setGlobalTrackingError('Not authenticated');
+          return;
+        }
+
+        // Fetch analytics for all campaigns in parallel (but limit to 5 concurrent)
+        const campaignIds = sentCampaigns.map(c => c.id);
+        const batchSize = 5;
+        const batches: string[][] = [];
         
-        const eventSource = new EventSource(trackingUrl);
-        eventSources.push(eventSource);
+        for (let i = 0; i < campaignIds.length; i += batchSize) {
+          batches.push(campaignIds.slice(i, i + batchSize));
+        }
 
-        eventSource.onopen = () => {
-          console.log(`🔗 Global tracking connected for campaign ${campaign.id}`);
-          setGlobalTrackingConnected(true);
-          setGlobalTrackingError(null);
-        };
+        // Process batches sequentially to avoid overwhelming the server
+        for (const batch of batches) {
+          if (!isActive) break;
 
-        eventSource.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            
-            if (data.type === 'data' && data.analytics) {
-              console.log(`📊 Global tracking update for ${campaign.id}:`, data.analytics);
-              
+          const promises = batch.map(async (campaignId) => {
+            try {
+              const response = await fetch(`${baseUrl}/campaigns/${campaignId}/analytics`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+              });
+
+              if (!response.ok) return null;
+
+              const result = await response.json();
+              if (result.success && result.data?.analytics) {
+                return {
+                  campaignId,
+                  analytics: result.data.analytics,
+                };
+              }
+              return null;
+            } catch (error) {
+              console.error(`Error fetching analytics for ${campaignId}:`, error);
+              return null;
+            }
+          });
+
+          const results = await Promise.all(promises);
+          
+          results.forEach((result) => {
+            if (result) {
               setGlobalTrackingData(prev => ({
                 ...prev,
-                [campaign.id]: {
-                  ...data.analytics,
+                [result.campaignId]: {
+                  ...result.analytics,
                   lastUpdated: new Date().toISOString(),
                 }
               }));
 
-              // Update campaigns list with real-time data
               setCampaignsRealTimeData(prev => ({
                 ...prev,
-                [campaign.id]: {
-                  openCount: data.analytics.totalOpened,
-                  clickCount: data.analytics.totalClicked,
-                  sentCount: data.analytics.totalSent,
+                [result.campaignId]: {
+                  openCount: result.analytics.totalOpened || 0,
+                  clickCount: result.analytics.totalClicked || 0,
+                  sentCount: result.analytics.totalSent || 0,
                 }
               }));
             }
-          } catch (error) {
-            console.error(`❌ Error parsing global tracking data for ${campaign.id}:`, error);
+          });
+
+          // Small delay between batches
+          if (batches.indexOf(batch) < batches.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 100));
           }
-        };
+        }
 
-        eventSource.onerror = (event) => {
-          console.error(`❌ Global tracking error for campaign ${campaign.id}:`, event);
-          setGlobalTrackingError(`Connection error for campaign ${campaign.id}`);
-        };
-
-      } catch (error) {
-        console.error(`❌ Failed to create global tracking for campaign ${campaign.id}:`, error);
+        setGlobalTrackingConnected(true);
+        setGlobalTrackingError(null);
+      } catch (error: any) {
+        console.error('Error in global tracking fetch:', error);
+        setGlobalTrackingError(error.message || 'Failed to fetch tracking data');
       }
-    });
+    };
+
+    // Initial fetch
+    fetchAllTracking();
+
+    // Poll every 30 seconds (increased from frequent SSE updates)
+    pollInterval = setInterval(fetchAllTracking, 30000);
 
     // Cleanup function
     return () => {
-      console.log('🧹 Cleaning up global tracking connections');
-      eventSources.forEach(eventSource => {
-        eventSource.close();
-      });
+      console.log('🧹 Cleaning up optimized global tracking');
+      isActive = false;
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
       setGlobalTrackingConnected(false);
     };
   }, [campaigns, globalTrackingEnabled]);
@@ -326,7 +433,7 @@ export default function CampaignsPage() {
         fromEmail,
         fromName: fromName || (sendingMethod === "gmail" ? gmailEmail.split('@')[0] : fromEmail.split('@')[0]),
         htmlContent,
-        templateId: selectedTemplate,
+        templateId: selectedTemplate && selectedTemplate !== "" && selectedTemplate !== "scratch" ? selectedTemplate : undefined,
       });
 
       if (!data.success) {
@@ -657,7 +764,7 @@ export default function CampaignsPage() {
         fromEmail,
         fromName: fromName || (sendingMethod === "gmail" ? gmailEmail.split('@')[0] : fromEmail.split('@')[0]),
         htmlContent,
-        templateId: selectedTemplate,
+        templateId: selectedTemplate && selectedTemplate !== "" && selectedTemplate !== "scratch" ? selectedTemplate : undefined,
       });
 
       if (!campaignData.success) {
@@ -911,7 +1018,13 @@ export default function CampaignsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="subject">Subject Line *</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="subject">Subject Line *</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setAiDialogOpen(true)}>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Generate with AI
+                  </Button>
+                </div>
                 <Input
                   id="subject"
                   placeholder="Your amazing subject line"
@@ -1048,6 +1161,51 @@ export default function CampaignsPage() {
                 {creating ? "Creating..." : "Create Campaign"}
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* AI Generation Dialog for Campaign */}
+        <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Generate Email with AI</DialogTitle>
+              <DialogDescription>Describe the email you want. We'll generate the subject and HTML content.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Prompt</Label>
+                <Textarea value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} placeholder="Describe your email. Example: Announce 25% off Black Friday sale with code BF25, valid for 48 hours." />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setAiDialogOpen(false)}>Cancel</Button>
+                <Button onClick={async () => {
+                  if (!aiPrompt.trim()) {
+                    toast({ title: 'Prompt required', description: 'Please describe the email you want to generate.', variant: 'destructive' });
+                    return;
+                  }
+                  setAiGenerating(true);
+                  try {
+                    const resp = await templateAPI.generateWithAI({ prompt: aiPrompt, save: false });
+                    if (resp.success) {
+                      const t = resp.data;
+                      setSubject(t.subject || '');
+                      setHtmlContent(t.html || '');
+                      setAiDialogOpen(false);
+                      setAiPrompt('');
+                      toast({ title: 'Generated', description: 'Email content generated successfully.' });
+                    } else {
+                      throw new Error(resp.error || 'Generation failed');
+                    }
+                  } catch (e: any) {
+                    toast({ title: 'Error', description: e.message, variant: 'destructive' });
+                  } finally {
+                    setAiGenerating(false);
+                  }
+                }} disabled={aiGenerating}>
+                  {aiGenerating ? 'Generating…' : 'Generate'}
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
         </div>
@@ -1214,6 +1372,17 @@ export default function CampaignsPage() {
                               Send
                             </>
                           )}
+                        </Button>
+                      )}
+                      {campaign.status === "draft" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openEditDialog(campaign)}
+                          className="h-8 px-3 text-xs"
+                          title="Edit sender, recipients, and content"
+                        >
+                          Edit
                         </Button>
                       )}
                       <Button
@@ -1458,6 +1627,66 @@ export default function CampaignsPage() {
               disabled={sendingMethod === "gmail" && !gmailConnected}
             >
               Send Campaign
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Campaign Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-0">
+          <DialogHeader>
+            <DialogTitle>Edit Campaign</DialogTitle>
+            <DialogDescription>Update sender details, subject, content, or template. For CSV sending, use Quick Send.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>From Name</Label>
+                <Input value={editFromName} onChange={(e) => setEditFromName(e.target.value)} />
+              </div>
+              <div>
+                <Label>From Email</Label>
+                <Input value={editFromEmail} onChange={(e) => setEditFromEmail(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <Label>Subject</Label>
+              <Input value={editSubject} onChange={(e) => setEditSubject(e.target.value)} />
+            </div>
+            <div>
+              <Label>Template (optional)</Label>
+              <Select value={editTemplateId} onValueChange={setEditTemplateId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a template or start from scratch" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="scratch">✏️ Start from Scratch</SelectItem>
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name} ({t.category})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Email Content (HTML)</Label>
+              <Textarea className="min-h-[200px] font-mono text-sm" value={editHtml} onChange={(e) => setEditHtml(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+            {editingCampaign && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setQuickSendDialogOpen(true);
+                }}
+              >
+                Upload CSV & Send Now
+              </Button>
+            )}
+            <Button onClick={handleSaveEdit} disabled={savingEdit}>
+              {savingEdit ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
         </DialogContent>

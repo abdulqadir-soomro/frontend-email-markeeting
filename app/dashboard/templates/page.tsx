@@ -8,8 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
-import { Mail, Plus, Trash2, Edit, Eye } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Mail, Plus, Trash2, Edit, Eye, Sparkles } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { templateAPI } from "@/lib/api-client";
 
 interface Template {
@@ -30,6 +30,16 @@ export default function TemplatesPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiForm, setAiForm] = useState({
+    prompt: "",
+    save: true,
+  });
+  const [aiCategory, setAiCategory] = useState("marketing");
+  const [aiEditDialogOpen, setAiEditDialogOpen] = useState(false);
+  const [aiEditGenerating, setAiEditGenerating] = useState(false);
+  const [aiEditPrompt, setAiEditPrompt] = useState("");
 
   const [formData, setFormData] = useState({
     name: "",
@@ -200,10 +210,16 @@ export default function TemplatesPage() {
           <h1 className="text-3xl font-bold">Email Templates</h1>
           <p className="text-gray-600">Create and manage reusable email templates</p>
         </div>
-        <Button onClick={handleNewTemplate}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Template
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={handleNewTemplate}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Template
+          </Button>
+          <Button variant="outline" onClick={() => setAiDialogOpen(true)}>
+            <Sparkles className="mr-2 h-4 w-4" />
+            Create with AI
+          </Button>
+        </div>
       </div>
 
       {templates.length === 0 ? (
@@ -217,9 +233,9 @@ export default function TemplatesPage() {
                 <Plus className="mr-2 h-4 w-4" />
                 Create Template
               </Button>
-              <Button onClick={handleSeedTemplates} variant="outline">
-                <Mail className="mr-2 h-4 w-4" />
-                Add 5 Sample Templates
+              <Button variant="outline" onClick={() => setAiDialogOpen(true)}>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Create with AI
               </Button>
             </div>
           </CardContent>
@@ -274,6 +290,76 @@ export default function TemplatesPage() {
         </div>
       )}
 
+      {/* AI Generator Dialog */}
+      <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Create Template with AI</DialogTitle>
+            <DialogDescription>Describe the email you want. We will generate subject and responsive HTML.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Prompt</Label>
+              <Textarea value={aiForm.prompt} onChange={(e) => setAiForm({ ...aiForm, prompt: e.target.value })} placeholder="Describe the email you want. Example: Announce 30% off Diwali sale for 48 hours with code DIWALI30." />
+            </div>
+            <div>
+              <Label>Category</Label>
+              <select className="w-full border rounded p-2" value={aiCategory} onChange={(e) => setAiCategory(e.target.value)}>
+                <option value="marketing">Marketing</option>
+                <option value="newsletter">Newsletter</option>
+                <option value="announcement">Announcement</option>
+                <option value="promotional">Promotional</option>
+                <option value="transactional">Transactional</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <input id="save-ai" type="checkbox" checked={aiForm.save} onChange={(e) => setAiForm({ ...aiForm, save: e.target.checked })} />
+              <Label htmlFor="save-ai">Save to templates</Label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setAiDialogOpen(false)}>Cancel</Button>
+              <Button onClick={async () => {
+                if (!aiForm.prompt.trim()) {
+                  toast({ title: 'Prompt required', description: 'Please describe the email to generate.', variant: 'destructive' });
+                  return;
+                }
+                setAiGenerating(true);
+                try {
+                  const resp = await templateAPI.generateWithAI({ prompt: aiForm.prompt, save: aiForm.save });
+                  if (resp.success) {
+                    const t = resp.data;
+                    if (aiForm.save) {
+                      toast({ title: 'Generated', description: 'Template saved.' });
+                      setAiDialogOpen(false);
+                      loadTemplates();
+                    } else {
+                      // Prefill the create dialog with AI output so you can edit HTML directly
+                      setFormData({
+                        name: (t.subject || 'AI Template').slice(0, 60),
+                        subject: t.subject || 'AI Subject',
+                        htmlContent: t.html || '',
+                        category: aiCategory,
+                      });
+                      setEditingTemplate(null);
+                      setAiDialogOpen(false);
+                      setShowDialog(true);
+                    }
+                  } else {
+                    throw new Error(resp.error || 'Generation failed');
+                  }
+                } catch (e: any) {
+                  toast({ title: 'Error', description: e.message, variant: 'destructive' });
+                } finally {
+                  setAiGenerating(false);
+                }
+              }} disabled={aiGenerating}>
+                {aiGenerating ? 'Generating…' : 'Generate'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Create/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -322,7 +408,24 @@ export default function TemplatesPage() {
             </div>
 
             <div>
-              <Label htmlFor="htmlContent">HTML Content</Label>
+              <div className="flex items-center justify-between mb-2">
+                <Label htmlFor="htmlContent">HTML Content</Label>
+                {editingTemplate && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setAiEditPrompt("");
+                      setAiEditDialogOpen(true);
+                    }}
+                    className="text-xs"
+                  >
+                    <Sparkles className="mr-1 h-3 w-3" />
+                    Update with AI
+                  </Button>
+                )}
+              </div>
               <Textarea
                 id="htmlContent"
                 value={formData.htmlContent}
@@ -353,6 +456,107 @@ export default function TemplatesPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Edit Dialog */}
+      <Dialog open={aiEditDialogOpen} onOpenChange={setAiEditDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Update Template with AI</DialogTitle>
+            <DialogDescription>
+              Describe how you want to modify this template. The AI will update the subject and HTML content accordingly.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Edit Instructions</Label>
+              <Textarea
+                value={aiEditPrompt}
+                onChange={(e) => setAiEditPrompt(e.target.value)}
+                placeholder="Example: Make it more colorful, change the tone to friendly, add discount information, improve the CTA button..."
+                rows={4}
+              />
+              <p className="text-sm text-gray-500 mt-1">
+                Describe what changes you want to make to the template.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setAiEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={async () => {
+                  if (!aiEditPrompt.trim()) {
+                    toast({
+                      title: "Prompt required",
+                      description: "Please describe how you want to modify the template.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  if (!editingTemplate) {
+                    toast({
+                      title: "Error",
+                      description: "No template selected for editing.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+
+                  setAiEditGenerating(true);
+                  try {
+                    const resp = await templateAPI.generateWithAI({
+                      prompt: aiEditPrompt,
+                      existingSubject: formData.subject,
+                      existingHtml: formData.htmlContent,
+                      editPrompt: aiEditPrompt,
+                      save: false,
+                    });
+
+                    if (resp.success && resp.data) {
+                      // Update the form with AI-generated content
+                      setFormData({
+                        ...formData,
+                        subject: resp.data.subject || formData.subject,
+                        htmlContent: resp.data.html || formData.htmlContent,
+                      });
+                      
+                      toast({
+                        title: "Success",
+                        description: "Template updated with AI. Review and save your changes.",
+                      });
+                      setAiEditDialogOpen(false);
+                      setAiEditPrompt("");
+                    } else {
+                      throw new Error(resp.error || "AI update failed");
+                    }
+                  } catch (error: any) {
+                    toast({
+                      title: "Error",
+                      description: error.message || "Failed to update template with AI",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setAiEditGenerating(false);
+                  }
+                }}
+                disabled={aiEditGenerating || !aiEditPrompt.trim()}
+              >
+                {aiEditGenerating ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2 inline-block"></div>
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Update with AI
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
