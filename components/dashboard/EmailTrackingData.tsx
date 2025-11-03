@@ -26,6 +26,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 // import { Badge } from "@/components/ui/badge";
 import { 
   Eye, 
@@ -261,8 +262,8 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
     return new Date(dateString).toLocaleString();
   };
 
-  const formatTimeToOpen = (minutes?: number) => {
-    if (!minutes) return "N/A";
+  const formatTimeToOpen = (minutes?: number | null) => {
+    if (minutes === undefined || minutes === null) return "N/A";
     if (minutes < 60) return `${minutes}m`;
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
@@ -271,9 +272,60 @@ export default function EmailTrackingData({ campaignId, campaignSubject }: Email
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
-        <span className="ml-2 text-gray-600">Loading tracking data...</span>
+      <div className="space-y-6">
+        {/* Summary Cards Skeleton */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <Skeleton className="h-8 w-16 mb-2" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                  <Skeleton className="h-8 w-8 rounded" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Filters Skeleton */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-wrap gap-4">
+              <Skeleton className="h-10 w-32" />
+              <Skeleton className="h-10 w-32" />
+              <Skeleton className="h-10 w-32" />
+              <Skeleton className="h-10 w-40" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Table Skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-4 p-4 border rounded-lg">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-48" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                  <div className="flex gap-2">
+                    <Skeleton className="h-6 w-16" />
+                    <Skeleton className="h-6 w-16" />
+                    <Skeleton className="h-6 w-16" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

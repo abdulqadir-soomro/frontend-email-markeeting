@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Mail, Users, Globe, TrendingUp } from "lucide-react";
 import { domainAPI, subscriberAPI, campaignAPI } from "@/lib/api-client";
 
@@ -84,8 +85,58 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div>
+        <div className="mb-8">
+          <Skeleton className="h-9 w-48 mb-2" />
+          <Skeleton className="h-5 w-96" />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-10 w-10 rounded-lg" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-32" />
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="p-4 rounded-lg border border-gray-200">
+                  <Skeleton className="h-5 w-40 mb-2" />
+                  <Skeleton className="h-4 w-64" />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-32" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <Skeleton className="h-6 w-6 rounded-full" />
+                  <div className="flex-1">
+                    <Skeleton className="h-5 w-32 mb-2" />
+                    <Skeleton className="h-4 w-48" />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }

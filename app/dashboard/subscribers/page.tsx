@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -345,8 +346,41 @@ export default function SubscribersPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div>
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <Skeleton className="h-9 w-40 mb-2" />
+            <Skeleton className="h-5 w-64" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-24" />
+            <Skeleton className="h-10 w-24" />
+            <Skeleton className="h-10 w-32" />
+            <Skeleton className="h-10 w-36" />
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-32" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
+                <div key={i} className="flex items-center gap-4 p-3 border rounded-lg">
+                  <Skeleton className="h-5 w-5 rounded" />
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-48" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                  <Skeleton className="h-6 w-20" />
+                  <Skeleton className="h-9 w-20" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

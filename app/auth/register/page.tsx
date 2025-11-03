@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
-import { Mail, Lock, User, UserPlus } from "lucide-react";
+import { Mail, Lock, User, UserPlus, Eye, EyeOff } from "lucide-react";
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
@@ -17,6 +17,8 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { register, googleAuth } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
@@ -24,39 +26,33 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (password !== confirmPassword) {
-      toast({
-        title: "Error",
-        description: "Passwords do not match",
-        variant: "destructive",
-      });
-      return;
-    }
+    const emailNorm = email.trim().toLowerCase();
+    const nameTrim = name.trim();
 
-    if (password.length < 6) {
-      toast({
-        title: "Error",
-        description: "Password must be at least 6 characters",
-        variant: "destructive",
-      });
-      return;
+    if (!nameTrim) {
+      return toast({ title: "Error", description: "Name is required", variant: "destructive" });
+    }
+    if (!emailNorm) {
+      return toast({ title: "Error", description: "Email is required", variant: "destructive" });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
+      return toast({ title: "Error", description: "Enter a valid email address", variant: "destructive" });
+    }
+    if (!password || password.length < 6) {
+      return toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
+    }
+    if (password !== confirmPassword) {
+      return toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
     }
 
     setLoading(true);
 
     try {
-      await register(name, email, password);
-      toast({
-        title: "Success",
-        description: "Account created successfully",
-      });
+      await register(nameTrim, emailNorm, password);
+      toast({ title: "Success", description: "Account created successfully" });
       router.push("/dashboard");
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create account",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message || "Failed to create account", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -131,13 +127,21 @@ export default function RegisterPage() {
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 pr-10"
                   required
                 />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-2.5 p-1 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </div>
             <div className="space-y-2">
@@ -146,13 +150,21 @@ export default function RegisterPage() {
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="confirmPassword"
-                  type="password"
+                  type={showConfirmPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 pr-10"
                   required
                 />
+                <button
+                  type="button"
+                  aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  className="absolute right-3 top-2.5 p-1 text-muted-foreground hover:text-foreground"
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </div>
             <Button type="submit" className="w-full" disabled={loading}>

@@ -9,33 +9,38 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
-import { Mail, Lock, LogIn } from "lucide-react";
+import { Mail, Lock, LogIn, Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { login, googleAuth } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
 
+    const emailNorm = email.trim().toLowerCase();
+    if (!emailNorm) {
+      return toast({ title: "Error", description: "Email is required", variant: "destructive" });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
+      return toast({ title: "Error", description: "Enter a valid email address", variant: "destructive" });
+    }
+    if (!password || password.length < 6) {
+      return toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
+    }
+
+    setLoading(true);
     try {
-      await login(email, password);
-      toast({
-        title: "Success",
-        description: "Logged in successfully",
-      });
+      await login(emailNorm, password);
+      toast({ title: "Success", description: "Logged in successfully" });
       router.push("/dashboard");
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to login",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message || "Failed to login", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -96,14 +101,22 @@ export default function LoginPage() {
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 pr-10"
                   autoComplete="current-password"
                   required
                 />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-2.5 p-1 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </div>
             <Button type="submit" className="w-full" disabled={loading}>

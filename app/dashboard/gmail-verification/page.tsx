@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
@@ -155,8 +156,23 @@ export default function GmailVerificationPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-lg">Loading Gmail verification...</div>
+      <div>
+        <div className="mb-8">
+          <Skeleton className="h-9 w-48 mb-2" />
+          <Skeleton className="h-5 w-64" />
+        </div>
+
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48 mb-2" />
+            <Skeleton className="h-4 w-96" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-32" />
+          </CardContent>
+        </Card>
       </div>
     );
   }
