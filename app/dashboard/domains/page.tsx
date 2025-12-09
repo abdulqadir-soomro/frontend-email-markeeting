@@ -117,10 +117,14 @@ export default function DomainsPage() {
       setDialogOpen(false);
       fetchDomains();
     } catch (error: any) {
+      const errorMessage = error.response?.data?.error || error.message || "Failed to add domain";
+      const isBlacklisted = error.response?.status === 403;
+      
       toast({
-        title: "Error",
-        description: error.message || "Failed to add domain",
+        title: isBlacklisted ? "Domain Not Allowed" : "Error",
+        description: errorMessage,
         variant: "destructive",
+        duration: isBlacklisted ? 8000 : 5000,
       });
     } finally {
       setAddingDomain(false);
