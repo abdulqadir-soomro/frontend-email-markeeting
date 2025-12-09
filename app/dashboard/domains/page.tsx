@@ -902,8 +902,11 @@ export default function DomainsPage() {
               </div>
               <div className="space-y-3">
                 <div className="bg-orange-100 border border-orange-300 rounded-lg p-3 mb-3">
-                  <p className="text-xs text-orange-900 font-semibold">
+                  <p className="text-xs text-orange-900 font-semibold mb-2">
                     ⚠️ Missing DMARC is a common reason emails go to spam!
+                  </p>
+                  <p className="text-xs text-orange-800">
+                    💡 Start with <code className="bg-orange-200 px-1 rounded">p=none</code> for monitoring (2-4 weeks), then move to <code className="bg-orange-200 px-1 rounded">p=quarantine</code> after reviewing reports.
                   </p>
                 </div>
                 <div>
@@ -924,14 +927,14 @@ export default function DomainsPage() {
                 <div>
                   <Label className="text-xs text-gray-700 font-medium">Value:</Label>
                   <div className="bg-white p-3 rounded mt-1 text-sm font-mono border-2 border-orange-300 break-all">
-                    v=DMARC1; p=quarantine; rua=mailto:dmarc@{selectedDomain?.domain}; pct=100; adkim=s; aspf=s
+                    v=DMARC1; p=none; rua=mailto:dmarc@{selectedDomain?.domain}; ruf=mailto:dmarc@{selectedDomain?.domain}; pct=100; aspf=r; adkim=r
                   </div>
                   <Button
                     size="sm"
                     variant="ghost"
                     className="mt-1 text-xs"
                     onClick={() =>
-                      copyToClipboard(`v=DMARC1; p=quarantine; rua=mailto:dmarc@${selectedDomain?.domain}; pct=100; adkim=s; aspf=s`)
+                      copyToClipboard(`v=DMARC1; p=none; rua=mailto:dmarc@${selectedDomain?.domain}; ruf=mailto:dmarc@${selectedDomain?.domain}; pct=100; aspf=r; adkim=r`)
                     }
                   >
                     <Copy className="h-3 w-3 mr-1" />
@@ -1304,14 +1307,14 @@ export default function DomainsPage() {
                       <div>
                         <span className="text-xs text-gray-700">Value:</span>
                         <div className="bg-white p-2 rounded text-sm font-mono mt-1 break-all">
-                          v=DMARC1; p=quarantine; rua=mailto:dmarc@{selectedDomainForManualVerify?.domain}
+                          v=DMARC1; p=none; rua=mailto:dmarc@{selectedDomainForManualVerify?.domain}; ruf=mailto:dmarc@{selectedDomainForManualVerify?.domain}; pct=100; aspf=r; adkim=r
                         </div>
                       </div>
                       <Button
                         size="sm"
                         variant="outline"
                         className="w-full"
-                        onClick={() => copyToClipboard(`v=DMARC1; p=quarantine; rua=mailto:dmarc@${selectedDomainForManualVerify?.domain}`)}
+                        onClick={() => copyToClipboard(`v=DMARC1; p=none; rua=mailto:dmarc@${selectedDomainForManualVerify?.domain}; ruf=mailto:dmarc@${selectedDomainForManualVerify?.domain}; pct=100; aspf=r; adkim=r`)}
                       >
                         <Copy className="h-4 w-4 mr-2" />
                         Copy Value
