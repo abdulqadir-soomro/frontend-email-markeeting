@@ -483,14 +483,14 @@ export default function DomainsPage() {
 
     try {
       const data = await domainAPI.verifyManual(selectedDomainForManualVerify.id, {
-        verificationMethod: 'aws-ses', // Default to automatic check
+        verificationMethod: 'aws-ses', // Check AWS SES verification status
         dnsRecords: [],
       });
 
       if (data.success) {
         toast({
           title: "Success",
-          description: "Domain verified successfully",
+          description: data.message || "Domain verified successfully in AWS SES",
         });
         
         await fetchDomains();
@@ -502,18 +502,33 @@ export default function DomainsPage() {
           setDnsRecords(null);
         }, 1500);
       } else {
+        // Show detailed error message
+        const errorMessage = data.error || data.message || "Domain verification failed";
+        const details = data.details;
+        
+        let fullMessage = errorMessage;
+        if (details?.verificationStatus) {
+          fullMessage += `\nAWS SES Status: ${details.verificationStatus}`;
+        }
+        if (details?.dkimStatus) {
+          fullMessage += `\nDKIM Status: ${details.dkimStatus}`;
+        }
+        
         toast({
           title: "Verification Failed",
-          description: data.error || "Please check your DNS records",
+          description: fullMessage,
           variant: "destructive",
+          duration: 6000, // Show longer for detailed errors
         });
         await fetchDomains();
       }
     } catch (error: any) {
+      const errorMessage = error.response?.data?.error || error.message || "Failed to verify domain";
       toast({
         title: "Error",
-        description: error.message || "Failed to verify domain",
+        description: errorMessage,
         variant: "destructive",
+        duration: 6000,
       });
       await fetchDomains();
     } finally {
@@ -1195,7 +1210,7 @@ export default function DomainsPage() {
           <DialogHeader>
             <DialogTitle>Manual Domain Verification</DialogTitle>
             <DialogDescription>
-              Add the DNS records below to your DNS provider to verify <strong>{selectedDomainForManualVerify?.domain}</strong>
+              Add the DNS records below to your DNS provider, then click "Check AWS SES Verification" to verify <strong>{selectedDomainForManualVerify?.domain}</strong> is actually verified in AWS SES.
             </DialogDescription>
           </DialogHeader>
 
@@ -1343,14 +1358,14 @@ export default function DomainsPage() {
                   </ul>
                 </li>
                 <li>Save all changes and wait 24-48 hours for DNS propagation</li>
-                <li>Click "Verify Domain" below to check verification status</li>
+                <li>Click "Check AWS SES Verification" below to verify the domain is actually verified in AWS SES</li>
               </ol>
             </div>
 
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
               <p className="text-xs text-yellow-800">
-                <strong>⚠️ Important:</strong> Add all DNS records to your provider first, then click "Verify Domain" below. 
-                DNS changes typically take 24-48 hours to propagate.
+                <strong>⚠️ Important:</strong> Add all DNS records to your provider first, then click "Check AWS SES Verification" below. 
+                This will check if AWS SES has actually verified your domain. DNS changes typically take 24-48 hours to propagate.
               </p>
             </div>
           </div>
@@ -1364,7 +1379,7 @@ export default function DomainsPage() {
               Cancel
             </Button>
             <Button onClick={handleManualVerify} disabled={manualVerifying}>
-              {manualVerifying ? "Verifying..." : "Verify Domain"}
+              {manualVerifying ? "Checking AWS SES..." : "Check AWS SES Verification"}
             </Button>
           </DialogFooter>
         </DialogContent>
