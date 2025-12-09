@@ -141,7 +141,10 @@ export default function DomainsPage() {
       console.log('DNS Records API response:', data);
       // Extract the dnsRecords array from the response
       const recordsArray = data.data?.dnsRecords || data.data || [];
-      setDnsRecords(recordsArray);
+      setDnsRecords({
+        ...data.data,
+        dnsRecords: recordsArray,
+      });
     } catch (error) {
       console.error("Error fetching DNS records:", error);
       toast({
@@ -1219,6 +1222,56 @@ export default function DomainsPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {/* DKIM Warning Banner */}
+            {dnsRecords?.dkimWarning && (
+              <div className="border-2 border-red-300 rounded-lg p-4 bg-red-50">
+                <div className="flex items-start gap-3">
+                  <div className="text-red-600 font-bold text-lg">⚠️</div>
+                  <div className="flex-1">
+                    <h5 className="font-bold text-red-900 mb-1">{dnsRecords.dkimWarning.title}</h5>
+                    <p className="text-sm text-red-800 mb-2">{dnsRecords.dkimWarning.message}</p>
+                    <div className="bg-white border border-red-200 rounded p-3 mt-2">
+                      <p className="text-xs font-semibold text-red-900 mb-1">Solution:</p>
+                      <p className="text-xs text-red-800">{dnsRecords.dkimWarning.solution}</p>
+                    </div>
+                    {dnsRecords.dkimWarning.dkimTokens && dnsRecords.dkimWarning.dkimTokens.length > 0 && (
+                      <p className="text-xs text-red-700 mt-2">
+                        <strong>Missing DKIM Tokens:</strong> {dnsRecords.dkimWarning.dkimTokens.join(', ')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* DKIM Status Indicator */}
+            {dnsRecords?.dkimStatus && (
+              <div className={`border rounded-lg p-3 ${
+                dnsRecords.dkimStatus === 'SUCCESS' 
+                  ? 'bg-green-50 border-green-300' 
+                  : 'bg-yellow-50 border-yellow-300'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-semibold ${
+                    dnsRecords.dkimStatus === 'SUCCESS' ? 'text-green-800' : 'text-yellow-800'
+                  }`}>
+                    DKIM Status: {dnsRecords.dkimStatus}
+                  </span>
+                  {dnsRecords.dkimStatus === 'SUCCESS' ? (
+                    <span className="text-green-600">✓</span>
+                  ) : (
+                    <span className="text-yellow-600">⚠</span>
+                  )}
+                </div>
+                {dnsRecords.dkimStatus !== 'SUCCESS' && (
+                  <p className="text-xs text-yellow-700 mt-1">
+                    Your emails are currently being signed with <strong>amazonses.com</strong> instead of <strong>{selectedDomainForManualVerify?.domain}</strong>. 
+                    This will cause DMARC to FAIL. Please add all DKIM records below and wait for verification.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* DNS Records Display */}
             <div className="border rounded-lg p-4 bg-gray-50">
               <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
@@ -1230,7 +1283,7 @@ export default function DomainsPage() {
                 <div className="flex items-center justify-center py-4">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
-              ) : dnsRecords && dnsRecords.dkimTokens ? (
+              ) : dnsRecords && (dnsRecords.dkimTokens || (Array.isArray(dnsRecords) && dnsRecords.length > 0)) ? (
                 <div className="space-y-3">
                   {/* SPF Record */}
                   <div className="border rounded-lg p-3 bg-white">
@@ -1265,7 +1318,7 @@ export default function DomainsPage() {
                   </div>
 
                   {/* DKIM Records */}
-                  {dnsRecords.dkimTokens.map((token: string, index: number) => (
+                  {(dnsRecords.dkimTokens || []).map((token: string, index: number) => (
                     <div key={index} className="border rounded-lg p-3 bg-white">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-semibold">DKIM Record {index + 1} of {dnsRecords.dkimTokens.length}</span>
